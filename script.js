@@ -322,8 +322,13 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
     ];
 
     allOfficialCBTNames.forEach(testNameRaw => {
-        // Normalize testName from aggregated scores for consistent comparison
-        const normalizedTestName = testNameRaw.replace('CB-T', 'CB Test ').trim(); // e.g., "CB-T4" becomes "CB Test 4"
+        // Normalize testName from aggregated scores for consistent display (e.g., "CB-T4" becomes "CB Test 4")
+        let normalizedTestName = testNameRaw;
+        if (testNameRaw.startsWith('CB-T')) {
+            normalizedTestName = testNameRaw.replace('CB-T', 'CB Test ').trim();
+        } else if (testNameRaw === 'DG-T0') {
+            normalizedTestName = 'CB Test 0'; // Assuming DG-T0 maps to CB Test 0 for display
+        }
 
         const foundTest = cbTests.find(t =>
             t.AssessmentName && t.AssessmentName.trim().toLowerCase() === testNameRaw.toLowerCase() // Match original name
@@ -331,9 +336,19 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
 
         if (foundTest) {
             console.log(`Attempting to find questions for CB Test: ${foundTest.AssessmentName}`);
-            const testQuestions = studentQuestionDetails.filter(q =>
-                q.AssessmentName && q.AssessmentName.trim().toLowerCase() === foundTest.AssessmentName.trim().toLowerCase()
-            ).map(qRow => {
+
+            // FIX: Updated filtering logic to match section-level names
+            const testQuestions = studentQuestionDetails.filter(q => {
+                const qAssessmentNameLower = q.AssessmentName ? q.AssessmentName.trim().toLowerCase() : '';
+                const foundTestNameLower = foundTest.AssessmentName ? foundTest.AssessmentName.trim().toLowerCase() : '';
+                const altDGTestNameLower = 'cbdbq01'; // The alternative name for DG-T0 in question details
+
+                // Match if q.AssessmentName starts with foundTest.AssessmentName OR if it's the specific DG-T0/CBDBQ01 mapping
+                return (
+                    qAssessmentNameLower.startsWith(foundTestNameLower) ||
+                    (foundTestNameLower === 'dg-t0' && qAssessmentNameLower === altDGTestNameLower)
+                );
+            }).map(qRow => {
                 // Ensure IsCorrect is a proper boolean
                 let isCorrectBoolean = false;
                 if (typeof qRow.IsCorrect === 'boolean') {
@@ -345,7 +360,8 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
                 }
 
                 // Default correct answer if not explicitly provided and student was incorrect
-                const correctAnswerText = !isCorrectBoolean && qRow.CorrectAnswerText ? qRow.CorrectAnswerText : 'N/A'; // Assuming a 'CorrectAnswerText' column might exist. If not, this remains N/A.
+                // Assuming a 'CorrectAnswerText' column might exist. If not, this remains N/A.
+                const correctAnswerText = !isCorrectBoolean && qRow.CorrectAnswerText ? qRow.CorrectAnswerText : 'N/A';
 
                 // Calculate class performance percentages
                 let classCorrect = 0;
@@ -355,8 +371,6 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
                     if (qRow.ClassAveragePoints_Question !== null) {
                         const classAccuracy = (qRow.ClassAveragePoints_Question / qRow.PointsPossible_Question);
                         classCorrect = Math.round(classAccuracy * 100);
-                        // For a simple donut, we can derive incorrect/unanswered from overall class accuracy
-                        // This is an approximation if raw counts aren't available.
                         classIncorrect = 100 - classCorrect; // Simplified for display
                         classUnanswered = 0; // Assuming all questions are attempted by class or default to 0
                     }
@@ -364,7 +378,8 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
 
 
                 return {
-                    id: `${qRow.AssessmentName.trim()}-Q${qRow.QuestionSequenceInQuiz}`,
+                    // FIX: Ensure ID is consistent with what renderDynamicCharts expects
+                    id: `${foundTest.AssessmentName.trim()}-${qRow.QuestionSequenceInQuiz}`, // Use original test name for ID prefix
                     subject: qRow.SAT_Skill_Tag && (qRow.SAT_Skill_Tag.includes("Math") ? "math" : qRow.SAT_Skill_Tag.includes("Reading") ? "reading" : qRow.SAT_Skill_Tag.includes("Writing") ? "writing" : "unknown"),
                     skill: qRow.SAT_Skill_Tag,
                     difficulty: qRow.Difficulty,
@@ -385,10 +400,14 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
             });
 
             if (testQuestions.length === 0) {
-                console.warn(`No questions found for ${foundTest.AssessmentName} in studentQuestionDetails.`);
+                console.warn(`No section-level questions found for base test "${foundTest.AssessmentName}" in studentQuestionDetails.`);
             } else {
-                console.log(`${testQuestions.length} questions found for ${foundTest.AssessmentName}.`);
+                console.log(`${testQuestions.length} section-level questions found for base test "${foundTest.AssessmentName}".`);
             }
+
+            // Also find the class average for the total score of this specific test from aggregated scores
+            const classAvgTotalScore = studentAggregatedScores.find(s => s.AssessmentName && s.AssessmentName.trim().toLowerCase() === foundTest.AssessmentName.trim().toLowerCase())?.ClassAverageScore_Normalized;
+
 
             transformedData.cbPracticeTests.push({
                 name: normalizedTestName, // Use normalized name for display
@@ -396,6 +415,7 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
                 rw: foundTest.ScaledScore_RW || "-",
                 math: foundTest.ScaledScore_Math || "-",
                 total: foundTest.ScaledScore_Total || "-",
+                classAvgTotal: classAvgTotalScore, // Add class average total score
                 questions: testQuestions
             });
         } else {
@@ -406,6 +426,7 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
                 rw: "-",
                 math: "-",
                 total: "-",
+                classAvgTotal: null, // No class average if not attempted
                 questions: []
             });
         }
@@ -420,10 +441,7 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
         .map(t => t.total);
     transformedData.scoreTrend.classAvgScores = transformedData.cbPracticeTests
         .filter(t => t.date !== "Not Attempted" && t.total !== "-")
-        .map(t => {
-            const correspondingAggregatedRow = studentAggregatedScores.find(s => s.AssessmentName && s.AssessmentName.trim().toLowerCase() === t.name.trim().toLowerCase());
-            return correspondingAggregatedRow ? correspondingAggregatedRow.ClassAverageScore_Normalized : null;
-        });
+        .map(t => t.classAvgTotal || null); // Use the new classAvgTotal property
 
 
     // --- Calculate Overall Scores and Latest Scores ---
@@ -445,18 +463,28 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
         if (!quizzesByAssessment[assessmentSource]) {
             quizzesByAssessment[assessmentSource] = {};
         }
-        // FIX: Corrected object assignment for quiz questions
+        // FIX: Corrected object assignment for quiz questions if it doesn't exist
         if (!quizzesByAssessment[assessmentSource][assessmentName]) {
             quizzesByAssessment[assessmentSource][assessmentName] = [];
         }
         quizzesByAssessment[assessmentSource][assessmentName].push(qRow);
     });
 
-    for (const source in quizzesByAssessment) {
-        for (const name in quizzesByAssessment[source]) {
-            console.log(`Attempting to process questions for Quiz: "${name}" (Source: "${source}")`);
-            const questions = quizzesByAssessment[source][name].map(qRow => {
-                 // Ensure IsCorrect is a proper boolean
+    // Get all unique EOC and Khan Academy assessment names from aggregated scores
+    const allEOCAssessments = aggregatedScoresData.filter(row =>
+        row.StudentGmailID === targetStudentGmailID && row.AssessmentSource === 'Canvas EOC Practice'
+    );
+    const allKhanAssessments = aggregatedScoresData.filter(row =>
+        row.StudentGmailID === targetStudentGmailID && row.AssessmentSource === 'Khan Academy Practice'
+    );
+
+    // Populate EOC Quizzes
+    allEOCAssessments.forEach(aggQuiz => {
+        const quizName = aggQuiz.AssessmentName.trim();
+        const quizSource = aggQuiz.AssessmentSource.trim();
+
+        const questionsForQuiz = quizzesByAssessment[quizSource] && quizzesByAssessment[quizSource][quizName] ?
+            quizzesByAssessment[quizSource][quizName].map(qRow => {
                 let isCorrectBoolean = false;
                 if (typeof qRow.IsCorrect === 'boolean') {
                     isCorrectBoolean = qRow.IsCorrect;
@@ -465,23 +493,14 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
                 } else if (typeof qRow.IsCorrect === 'number') {
                     isCorrectBoolean = qRow.IsCorrect === 1;
                 }
-
-                const correctAnswerText = !isCorrectBoolean && qRow.CorrectAnswerText ? qRow.CorrectAnswerText : 'N/A'; // Assuming a 'CorrectAnswerText' column might exist.
-
+                const correctAnswerText = !isCorrectBoolean && qRow.CorrectAnswerText ? qRow.CorrectAnswerText : 'N/A';
                 let classCorrect = 0;
-                let classIncorrect = 0;
-                let classUnanswered = 0;
-                if (qRow.PointsPossible_Question > 0) {
-                    if (qRow.ClassAveragePoints_Question !== null) {
-                        const classAccuracy = (qRow.ClassAveragePoints_Question / qRow.PointsPossible_Question);
-                        classCorrect = Math.round(classAccuracy * 100);
-                        classIncorrect = 100 - classCorrect;
-                        classUnanswered = 0;
-                    }
+                if (qRow.PointsPossible_Question > 0 && qRow.ClassAveragePoints_Question !== null) {
+                    classCorrect = Math.round((qRow.ClassAveragePoints_Question / qRow.PointsPossible_Question) * 100);
                 }
 
                 return {
-                    id: `${name}-Q${qRow.QuestionSequenceInQuiz}`,
+                    id: `${quizName}-${qRow.QuestionSequenceInQuiz}`,
                     subject: qRow.SAT_Skill_Tag && (qRow.SAT_Skill_Tag.includes("Math") ? "math" : qRow.SAT_Skill_Tag.includes("Reading") ? "reading" : qRow.SAT_Skill_Tag.includes("Writing") ? "writing" : "unknown"),
                     skill: qRow.SAT_Skill_Tag,
                     difficulty: qRow.Difficulty,
@@ -493,49 +512,86 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
                     classAvgTime: qRow.ClassAverageTime_Seconds,
                     classPerformance: {
                         correct: classCorrect,
-                        incorrect: classIncorrect,
-                        unanswered: classUnanswered
+                        incorrect: 100 - classCorrect,
+                        unanswered: 0
                     },
-                    source: source,
+                    source: quizSource,
                     text: qRow.QuestionText_fromMetadata
                 };
+            }) : [];
+
+        // Determine subject category for EOC
+        const subjectCategoryEOC = quizName.toLowerCase().includes('r-eoc') ? 'reading' :
+                                   quizName.toLowerCase().includes('w-eoc') ? 'writing' :
+                                   quizName.toLowerCase().includes('m-eoc') ? 'math' : 'unknown';
+
+        if (transformedData.eocQuizzes[subjectCategoryEOC]) {
+            transformedData.eocQuizzes[subjectCategoryEOC].push({
+                name: quizName,
+                date: aggQuiz.AttemptDate || "N/A",
+                latestScore: aggQuiz.Score_Percentage !== null ? `${aggQuiz.Score_Percentage}% (${aggQuiz.Score_Raw_Combined}/${aggQuiz.PointsPossible_Combined})` : "N/A",
+                classAvgScore: aggQuiz.ClassAverageScore_Normalized, // Add class avg for EOC quiz
+                questions: questionsForQuiz
             });
-
-            if (questions.length === 0) {
-                console.warn(`No questions mapped for quiz "${name}" from source "${source}".`);
-            } else {
-                console.log(`${questions.length} questions mapped for quiz "${name}" from source "${source}".`);
-            }
-
-            const matchingAggregatedScore = studentAggregatedScores.find(s => s.AssessmentName && s.AssessmentName.trim().toLowerCase() === name.toLowerCase());
-            const latestScorePercentage = matchingAggregatedScore ? matchingAggregatedScore.Score_Percentage : null;
-            const latestScoreRaw = matchingAggregatedScore ? `${matchingAggregatedScore.Score_Raw_Combined}/${matchingAggregatedScore.PointsPossible_Combined}` : null;
-            const attemptDate = matchingAggregatedScore ? matchingAggregatedScore.AttemptDate : "N/A";
-
-            const quizEntry = {
-                name: name,
-                date: attemptDate,
-                latestScore: latestScorePercentage !== null ? `${latestScorePercentage}% (${latestScoreRaw})` : "N/A",
-                questions: questions
-            };
-
-            if (source === 'Canvas EOC Practice') {
-                const subjectCategory = quizEntry.name.toLowerCase().includes('r-eoc') ? 'reading' :
-                                         quizEntry.name.toLowerCase().includes('w-eoc') ? 'writing' :
-                                         quizEntry.name.toLowerCase().includes('m-eoc') ? 'math' : 'unknown';
-                if (transformedData.eocQuizzes[subjectCategory]) {
-                    transformedData.eocQuizzes[subjectCategory].push(quizEntry);
-                }
-            } else if (source === 'Khan Academy Practice') {
-                const khanSubject = quizEntry.name.toLowerCase().includes('reading') ? 'reading' :
-                                     quizEntry.name.toLowerCase().includes('writing') || quizEntry.name.toLowerCase().includes('grammar') ? 'writing' :
-                                     quizEntry.name.toLowerCase().includes('math') || quizEntry.name.toLowerCase().includes('algebra') || quizEntry.name.toLowerCase().includes('geometry') ? 'math' : 'unknown';
-                if (transformedData.khanAcademy[khanSubject]) {
-                    transformedData.khanAcademy[khanSubject].push(quizEntry);
-                }
-            }
         }
-    }
+    });
+
+    // Populate Khan Academy Quizzes
+    allKhanAssessments.forEach(aggQuiz => {
+        const quizName = aggQuiz.AssessmentName.trim();
+        const quizSource = aggQuiz.AssessmentSource.trim();
+
+        const questionsForQuiz = quizzesByAssessment[quizSource] && quizzesByAssessment[quizSource][quizName] ?
+            quizzesByAssessment[quizSource][quizName].map(qRow => {
+                 let isCorrectBoolean = false;
+                if (typeof qRow.IsCorrect === 'boolean') {
+                    isCorrectBoolean = qRow.IsCorrect;
+                } else if (typeof qRow.IsCorrect === 'string') {
+                    isCorrectBoolean = qRow.IsCorrect.toLowerCase() === 'true' || qRow.IsCorrect === '1';
+                } else if (typeof qRow.IsCorrect === 'number') {
+                    isCorrectBoolean = qRow.IsCorrect === 1;
+                }
+                const correctAnswerText = !isCorrectBoolean && qRow.CorrectAnswerText ? qRow.CorrectAnswerText : 'N/A';
+                let classCorrect = 0;
+                if (qRow.PointsPossible_Question > 0 && qRow.ClassAveragePoints_Question !== null) {
+                    classCorrect = Math.round((qRow.ClassAveragePoints_Question / qRow.PointsPossible_Question) * 100);
+                }
+                return {
+                    id: `${quizName}-${qRow.QuestionSequenceInQuiz}`,
+                    subject: qRow.SAT_Skill_Tag && (qRow.SAT_Skill_Tag.includes("Math") ? "math" : qRow.SAT_Skill_Tag.includes("Reading") ? "reading" : qRow.SAT_Skill_Tag.includes("Writing") ? "writing" : "unknown"),
+                    skill: qRow.SAT_Skill_Tag,
+                    difficulty: qRow.Difficulty,
+                    yourAnswer: qRow.StudentAnswer,
+                    correctAnswer: correctAnswerText,
+                    isCorrect: isCorrectBoolean,
+                    explanation: "Explanation will go here if available",
+                    yourTime: qRow.TimeSpentOnQuestion_Seconds,
+                    classAvgTime: qRow.ClassAverageTime_Seconds,
+                    classPerformance: {
+                        correct: classCorrect,
+                        incorrect: 100 - classCorrect,
+                        unanswered: 0
+                    },
+                    source: quizSource,
+                    text: qRow.QuestionText_fromMetadata
+                };
+            }) : [];
+
+        const khanSubject = quizName.toLowerCase().includes('reading') ? 'reading' :
+                            quizName.toLowerCase().includes('writing') || quizName.toLowerCase().includes('grammar') ? 'writing' :
+                            quizName.toLowerCase().includes('math') || quizName.toLowerCase().includes('algebra') || quizName.toLowerCase().includes('geometry') ? 'math' : 'unknown';
+
+        if (transformedData.khanAcademy[khanSubject]) {
+            transformedData.khanAcademy[khanSubject].push({
+                name: quizName,
+                date: aggQuiz.AttemptDate || "N/A",
+                latestScore: aggQuiz.Score_Percentage !== null ? `${aggQuiz.Score_Percentage}% (${aggQuiz.Score_Raw_Combined}/${aggQuiz.PointsPossible_Combined})` : "N/A",
+                classAvgScore: aggQuiz.ClassAverageScore_Normalized, // Add class avg for Khan quiz
+                questions: questionsForQuiz
+            });
+        }
+    });
+
 
     // --- Calculate Skill Performance (from all questions) ---
     // The previous implementation used allStudentQuestions directly, which is correct.
@@ -1394,23 +1450,40 @@ function renderDynamicCharts() {
         }
 
         // Extract original question ID from the chartId more reliably
+        // The ID format is expected to be "prefix-testname-questionsequence" or "prefix-quizname-questionsequence"
+        // Example: "chart-test-4-CB-T4-M1-Q1" => "CB-T4-M1-Q1"
+        // Example: "chart-skill-0-M-EOC-C5-RatioProportion-Q1" => "M-EOC-C5-RatioProportion-Q1"
+
+        // The ID of the actual question object stored in ALL_DASHBOARD_QUESTIONS is generated as:
+        // `${testName.trim()}-${qRow.QuestionSequenceInQuiz}` for CB tests (e.g. "CB-T4-Q1")
+        // `${quizName}-${qRow.QuestionSequenceInQuiz}` for EOC/Khan (e.g. "M-EOC-C5-RatioProportion-Q1")
+
+        // Let's refine the extraction to correctly match these IDs.
+        // The `uniqueIdPrefix` from renderQuestionAnalysisCard is either "skill-index" or "test-index" or "eoc-index"
+        // The actual assessment name (like CB-T4, M-EOC-C5-RatioProportion) is part of the `q.id` itself.
+        // We need to parse the `chartId` to get the `q.id` that was used to create the question object.
+
+        // Simpler approach: `renderQuestionAnalysisCard` passes `q.id` directly as part of the canvas ID.
+        // Let's ensure q.id has the full AssessmentName + QuestionSequence.
+        // In renderQuestionAnalysisCard, `id: `${foundTest.AssessmentName.trim()}-${qRow.QuestionSequenceInQuiz}`` is used.
+        // So the chart ID will look like `chart-skill-0-CB-T4-Q1` if `q.id` is `CB-T4-Q1`.
+
         const parts = chartId.split('-');
-        const rawQuestionId = parts[parts.length - 1]; // e.g., "Q1" or "M-EOC-C8"
-        const assessmentNamePart = parts.slice(1, parts.length - 1).join('-'); // e.g., "skill-0" or "CB-T4"
+        // Reconstruct the `q.id` that exists in ALL_DASHBOARD_QUESTIONS
+        // Assuming the actual question ID is the part after the initial prefix like "chart-skill-X-" or "chart-test-X-"
+        let qIdToMatch = parts.slice(2).join('-'); // e.g., for "chart-skill-0-CB-T4-Q1", this becomes "CB-T4-Q1"
 
-        // We need to match the original ID generated in transformRawData.
-        // A common pattern is AssessmentName-QuestionSequenceInQuiz.
-        // Example: "CB-T4-Q1" or "R-EOC-C1-Q5"
-        const questionToFindId = `${assessmentNamePart}-${rawQuestionId}`;
+        const qData = ALL_DASHBOARD_QUESTIONS.find(q => q.id === qIdToMatch);
 
 
-        // Search ALL_DASHBOARD_QUESTIONS using the derived ID
-        const qData = ALL_DASHBOARD_QUESTIONS.find(q => q.id === questionToFindId);
-
-        if (qData && qData.classPerformance) {
+        if (qData && qData.classPerformance && (qData.classPerformance.correct + qData.classPerformance.incorrect + qData.classPerformance.unanswered > 0)) { // Ensure data exists
             const correct = qData.classPerformance.correct || 0;
             const incorrect = qData.classPerformance.incorrect || 0;
             const unanswered = qData.classPerformance.unanswered || 0;
+
+            canvas.style.display = 'block'; // Ensure canvas is visible
+            const existingNoDataMessage = canvas.parentNode.querySelector('.no-chart-data-message');
+            if (existingNoDataMessage) existingNoDataMessage.remove(); // Remove old message if data exists
 
             new Chart(canvas, {
                 type: 'doughnut',
@@ -1456,7 +1529,7 @@ function renderDynamicCharts() {
                 }
             });
         } else {
-             // If no data, hide the canvas and show a message
+             // If no data or data sums to zero, hide the canvas and show a message
             const parentDiv = canvas.parentNode;
             canvas.style.display = 'none';
             if (!parentDiv.querySelector('.no-chart-data-message')) {
