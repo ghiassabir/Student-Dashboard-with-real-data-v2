@@ -46,15 +46,17 @@ let currentStudentData = {
         ],
         reading: [
             "1: Overview of SAT Reading", "2: Vocabulary in Context", "3: Making the Leap",
-            "4: The Big Picture", "5: Literal Comprehension", "6: Reading for Function",
-            "7: Text Completions", "8: Supporting & Undermining", "9: Graphs & Charts",
-            "10: Paired Passages", "Appendix: Question Types"
+            "4: The Big Picture", "5: Literal Comprehension",
+            "6: Reading for Function", "7: Text Completions", "8: Supporting & Undermining",
+            "9: Graphs & Charts", "10: Paired Passages", "Appendix: Question Types"
         ]
     }
 };
 
 // Global array to hold all questions for easy access (populated after data transformation)
 let ALL_DASHBOARD_QUESTIONS = [];
+// Global array to store unique student email IDs for the filter
+let allStudentEmails = [];
 
 // --- MAPPING SAT SKILLS TO BOOK CHAPTERS (extracted from your PDF) ---
 const SAT_CHAPTER_SKILL_MAPPING = {
@@ -220,6 +222,8 @@ const ASSESSMENT_NAME_MAP = {
 
 // Global array to hold all questions for easy access (populated after data transformation)
 let ALL_DASHBOARD_QUESTIONS = [];
+// Global array to store unique student email IDs for the filter
+let allStudentEmails = [];
 
 // --- Helper Functions ---
 
@@ -320,15 +324,21 @@ async function fetchCsvData(url) {
 function transformRawData(aggregatedScoresData, questionDetailsData) {
     console.log("Starting data transformation...");
 
-    // Target student based on feedback, if available, otherwise first student in data
-    // Using 'aisha.malik@example.pk' as per your provided feedback for consistency.
-    const targetStudentGmailID = 'aisha.malik@example.pk'; 
-    
+    // Determine the target student email ID from the filter, or default to the first student
+    const studentEmailFilter = document.getElementById('studentEmailFilter');
+    let targetStudentGmailID = studentEmailFilter ? studentEmailFilter.value : null;
+
+    if (!targetStudentGmailID && aggregatedScoresData.length > 0) {
+        targetStudentGmailID = aggregatedScoresData[0]['StudentGmailID'];
+    } else if (!targetStudentGmailID) {
+        targetStudentGmailID = "default@example.com"; // Fallback if no data at all
+    }
+
     const studentAggregatedScores = aggregatedScoresData.filter(row => row.StudentGmailID === targetStudentGmailID);
     const studentQuestionDetails = questionDetailsData.filter(row => row.StudentGmailID === targetStudentGmailID);
 
-    // Default to first student if target not found or data is empty
-    const actualStudentFullName = studentAggregatedScores.length > 0 ? studentAggregatedScores[0]['StudentFullName'] : (aggregatedScoresData.length > 0 ? aggregatedScoresData[0]['StudentFullName'] : "Unknown Student");
+    // Get actual student info from the filtered data
+    const actualStudentFullName = studentAggregatedScores.length > 0 ? studentAggregatedScores[0]['StudentFullName'] : "Unknown Student";
     const actualStudentTargetScore = studentAggregatedScores.length > 0 ? studentAggregatedScores[0]['StudentTargetScore'] : 1400;
 
     let transformedData = {
@@ -358,8 +368,8 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
         if (row.AssessmentSource === mainCBTestSource && allOfficialCBTNames.includes(row.AssessmentName)) {
             // Ensure total score is valid before considering it an attempted test
             const totalScore = parseFloat(row.ScaledScore_Total);
-            if (!isNaN(totalScore) && totalScore > 0) { // Only process if there's a valid scaled total score
-                if (!processedCbTests[row.AssessmentName]) { // Avoid processing the same test multiple times
+            if (!isNaN(totalScore) && totalScore > 0) {
+                if (!processedCbTests[row.AssessmentName]) {
                     const testQuestions = studentQuestionDetails.filter(q => q.AssessmentName === row.AssessmentName)
                         .map(qRow => ({
                             id: `${qRow.AssessmentName}-Q${qRow.QuestionSequenceInQuiz}`,
@@ -664,9 +674,125 @@ document.addEventListener('DOMContentLoaded', function () {
     Chart.defaults.responsive = true;
     Chart.defaults.maintainAspectRatio = false;
 
-    loadAndDisplayData(); // Initiate data loading and display
+    // Initial data loading and display (this will also populate the email filter)
+    loadAndDisplayData(true); // Pass 'true' to indicate initial load to populate filter
     setupEventListeners(); // Set up event listeners for tabs etc.
 });
+
+/**
+ * Main function to load and display all dashboard data.
+ * @param {boolean} isInitialLoad - True if this is the first load (to populate email filter).
+ */
+async function loadAndDisplayData(isInitialLoad = false) {
+    console.log("Loading and displaying data...");
+    document.getElementById('studentNameDisplay').textContent = "Loading data...";
+
+    try {
+        const aggregatedScoresData = await fetchCsvData(CSV_URLS.aggregatedScores);
+        const questionDetailsData = await fetchCsvData(CSV_URLS.questionDetails);
+
+        // Populate the email filter on initial load
+        if (isInitialLoad && aggregatedScoresData.length > 0) {
+            allStudentEmails = [...new Set(aggregatedScoresData.map(row => row.StudentGmailID))].sort();
+            populateEmailFilter(allStudentEmails);
+        }
+
+        const transformedData = transformRawData(aggregatedScoresData, questionDetailsData);
+        currentStudentData = transformedData; // Update global data object
+
+        // Populate ALL_DASHBOARD_QUESTIONS from the newly fetched data
+        // Filter out questions where subject is 'unknown' or skill is 'TBD...' or 'No Correlation'
+        ALL_DASHBOARD_QUESTIONS = [
+            ...(currentStudentData.cbPracticeTests.flatMap(t => t.questions || [])),
+            ...(Object.values(currentStudentData.eocQuizzes).flat().flatMap(q => q.questions || [])),
+            ...(Object.values(currentStudentData.khanAcademy).flat().flatMap(q => q.questions || []))
+        ].filter(q => q.subject !== 'unknown' && q.skill && !String(q.skill).includes('TBD_No_Correlation_Or_CustomQID'));
+
+        console.log("ALL_DASHBOARD_QUESTIONS populated with:", ALL_DASHBOARD_QUESTIONS.length, "relevant questions.");
+
+
+        // Update student name display
+        document.getElementById('studentNameDisplay').textContent = `Welcome! ${currentStudentData.studentName}`;
+        
+        // Re-render dashboard sections with the new data
+        populateOverview(currentStudentData);
+        populatePracticeTestsTable(currentStudentData.cbPracticeTests);
+
+        // Iterate through subjects to populate their specific sections
+        const subjects = ['reading', 'writing', 'math'];
+        subjects.forEach(subject => {
+            populateEOCPractice(subject, currentStudentData.eocQuizzes[subject] || []);
+            populateKhanAcademy(subject, currentStudentData.khanAcademy[subject] || []);
+            
+            // Populate Skills Hub only if it's the active tab, otherwise it will be populated on tab switch
+            const skillsHubTabButton = document.querySelector(`.sub-tab-button[data-sub-tab="${subject}-skills-hub"]`);
+            if (skillsHubTabButton && skillsHubTabButton.classList.contains('active')) {
+                populateSkillsHub(subject, currentStudentData.skills[subject] || []);
+            }
+        });
+
+        // Manually trigger click on the initial active tab (Overview) to ensure charts load
+        // This needs to be done AFTER all event listeners are set up.
+        const activeMainTabButton = document.querySelector('.main-tab-button.active');
+        if (activeMainTabButton) {
+            activeMainTabButton.click();
+        } else {
+            // Fallback: if no tab is active, activate Overview
+            document.querySelector('.main-tab-button[data-main-tab="overview"]')?.click();
+        }
+
+        console.log("Dashboard data loaded and displayed successfully.");
+
+    } catch (error) {
+        console.error("Failed to load and display dashboard data:", error);
+        document.getElementById('studentNameDisplay').textContent = "Data Loading Failed!";
+        // Optionally, display a user-friendly error message on the dashboard
+    }
+}
+
+/**
+ * Populates the student email filter dropdown.
+ * @param {Array<string>} emails - Array of unique student email IDs.
+ */
+function populateEmailFilter(emails) {
+    const filterSelect = document.getElementById('studentEmailFilter');
+    if (!filterSelect) return;
+
+    filterSelect.innerHTML = ''; // Clear existing options
+    if (emails.length === 0) {
+        filterSelect.innerHTML = '<option value="">No Students Found</option>';
+        filterSelect.disabled = true;
+        return;
+    }
+
+    // Add a default "Select a student" option
+    const defaultOption = document.createElement('option');
+    defaultOption.value = "";
+    defaultOption.textContent = "Select a student...";
+    filterSelect.appendChild(defaultOption);
+
+    emails.forEach(email => {
+        const option = document.createElement('option');
+        option.value = email;
+        option.textContent = email;
+        filterSelect.appendChild(option);
+    });
+
+    filterSelect.disabled = false;
+
+    // Add event listener for when a new student is selected
+    filterSelect.addEventListener('change', () => {
+        loadAndDisplayData(); // Reload data for the newly selected student
+    });
+
+    // Set the filter to the default student if one exists
+    if (emails.includes('aisha.malik@example.pk')) { // Set default to Aisha if she's in the list
+        filterSelect.value = 'aisha.malik@example.pk';
+    } else if (emails.length > 0) {
+        filterSelect.value = emails[0]; // Otherwise, select the first student
+    }
+}
+
 
 /**
  * Sets up all the interactive elements like tabs, mobile menu, and the refresh button.
@@ -681,7 +807,7 @@ function setupEventListeners() {
     document.getElementById('currentYear').textContent = new Date().getFullYear();
 
     hamburgerButton?.addEventListener('click', () => mobileMenu?.classList.toggle('hidden'));
-    refreshDataBtn?.addEventListener('click', handleRefreshData);
+    refreshDataBtn?.addEventListener('click', handleRefreshData); // Handle refresh data button click
 
     const switchMainTab = (tabElement) => {
         const targetTabName = tabElement.getAttribute('data-main-tab');
@@ -754,7 +880,7 @@ function setupEventListeners() {
 function handleRefreshData() {
     console.log("Refresh Data button clicked! Initiating data reload.");
     alert("Refreshing data from Google Sheets...");
-    loadAndDisplayData(); // Re-fetch and re-display all data
+    loadAndDisplayData(); // Reload data based on current filter selection
 }
 
 // --- Dashboard Population Functions ---
@@ -781,7 +907,7 @@ function populateOverview(data) {
         <div class="score-card"><h3 class="text-md font-medium text-gray-600">Your Target Score</h3><p class="text-3xl font-bold" style="color: #8a3ffc;">${data.targetScore}</p></div>`;
 
     // Populate Strengths & Weaknesses
-    const allSkills = Object.values(data.skills).flat().filter(s => s.attempted); // Filter for attempted skills first
+    const allSkills = Object.values(data.skills).flat().filter(s => s.attempted);
     const strengths = [...allSkills].sort((a, b) => b.score - a.score).slice(0, 3);
     const weaknesses = [...allSkills].sort((a, b) => a.score - b.score).slice(0, 3);
 
