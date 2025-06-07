@@ -2,6 +2,7 @@
 'use strict';
 
 // Global data objects (initialized once, or re-initialized if explicitly needed by refresh)
+// Using window.dashboardData to encapsulate all global state and prevent re-declaration errors
 window.dashboardData = window.dashboardData || {
     currentStudent: {
         name: "Loading Data...",
@@ -13,7 +14,7 @@ window.dashboardData = window.dashboardData || {
         cbPracticeTests: [],
         eocQuizzes: { reading: [], writing: [], math: [] },
         khanAcademy: { reading: [], writing: [], math: [] },
-        skills: { reading: [], writing: [] , math: [] }, // Added math to skills initialization for consistency
+        skills: { reading: [], writing: [], math: [] }, // Ensure all subjects are initialized for skills
     },
     ALL_DASHBOARD_QUESTIONS: [],
     ALL_AGGREGATED_SCORES_RAW: [],
@@ -66,12 +67,12 @@ window.dashboardData = window.dashboardData || {
             "understanding radians and the unit circle (basics)": ["24: Trigonometry"],
             "Interpreting and analyzing data presented in tables, charts, and graphs (scatterplots, bar graphs, line graphs)": ["25: Reading Data"],
             "Calculating basic probabilities, including compound events": ["26: Probability"],
-            "Calculating and interpreting measures of central tendency (mean, median, mode) and spread (range)": ["27: Statistics 1"],
+            "Calculating and interpreting measures of central tendency (mean, median, mode) and a range": ["27: Statistics 1"], // Changed "spread (range)" to "a range"
             "Understanding standard deviation, distributions (like normal distribution basics), and basic statistical inference": ["28: Statistics 2"],
             "Calculating the volume of 3D shapes (e.g., prisms, cylinders, cones, spheres)": ["29: Volume"]
         },
         writing: { // Changed from Array to Object for consistency with Math if skill keys are needed
-            "1: Transitions": ["1: Transitions"], // Changed to object for consistency
+            "1: Transitions": ["1: Transitions"],
             "2: Specific Focus": ["2: Specific Focus"],
             "3: Sentences & Fragments": ["3: Sentences & Fragments"],
             "4: Joining & Separating Sentences": ["4: Joining & Separating Sentences"],
@@ -188,7 +189,7 @@ async function loadAndDisplayData(studentEmail = null) {
         }
 
         if (!targetStudentGmailID) {
-            console.warn("No student data available to display.");
+            console.warn("No student email provided and no unique students found to display.");
             document.getElementById('studentNameDisplay').textContent = "No Student Data Found!";
             showEmailInputModal(); // Show modal if no student is found
             return;
@@ -509,8 +510,6 @@ function transformRawData(aggregatedScoresData, questionDetailsData, targetStude
 
         console.log(`Processing EOC quiz from aggregated: "${quizName}" (Source: "${quizSource}")`);
 
-        // FIX: Match quiz questions using startsWith or includes based on the quiz name
-        // This is crucial for matching 'R-EOC-C8' with 'R-EOC-C8-Q1' etc.
         const questionsForQuiz = Object.values(questionsGroupedByAssessment[quizSource] || {})
             .flatMap(questionsArray => questionsArray.filter(qRow =>
                 qRow.AssessmentName && qRow.AssessmentName.trim().toLowerCase().startsWith(quizName.toLowerCase())
@@ -580,7 +579,6 @@ function transformRawData(aggregatedScoresData, questionDetailsData, targetStude
 
         console.log(`Processing Khan Academy quiz from aggregated: "${quizName}" (Source: "${quizSource}")`);
 
-        // FIX: Match quiz questions using startsWith or includes based on the quiz name
         const questionsForQuiz = Object.values(questionsGroupedByAssessment[quizSource] || {})
             .flatMap(questionsArray => questionsArray.filter(qRow =>
                 qRow.AssessmentName && qRow.AssessmentName.trim().toLowerCase().includes(quizName.toLowerCase())
