@@ -218,6 +218,9 @@ const ASSESSMENT_NAME_MAP = {
     "CBDBQ01": "Diagnostic Practice Quiz" // Changed from Test to Quiz as it appears in EOC context
 };
 
+// Global array to hold all questions for easy access (populated after data transformation)
+let ALL_DASHBOARD_QUESTIONS = [];
+
 // --- Helper Functions ---
 
 // Helper to determine subject from skill tag
@@ -318,6 +321,7 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
     console.log("Starting data transformation...");
 
     // Target student based on feedback, if available, otherwise first student in data
+    // Using 'aisha.malik@example.pk' as per your provided feedback for consistency.
     const targetStudentGmailID = 'aisha.malik@example.pk'; 
     
     const studentAggregatedScores = aggregatedScoresData.filter(row => row.StudentGmailID === targetStudentGmailID);
@@ -339,7 +343,7 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
         eocQuizzes: { reading: [], writing: [], math: [] },
         khanAcademy: { reading: [], writing: [], math: [] },
         skills: { reading: [], writing: [], math: [] },
-        chapters: SAT_CHAPTER_SKILL_MAPPING // Reference the global constant
+        chapters: currentStudentData.chapters // Reference the global constant
     };
 
     // --- Process CB Practice Tests from Aggregated Scores ---
@@ -351,41 +355,45 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
 
     studentAggregatedScores.forEach(row => {
         // Filter for main CB Tests with valid scores
-        if (row.AssessmentSource === mainCBTestSource && allOfficialCBTNames.includes(row.AssessmentName) && row.ScaledScore_Total !== null && row.ScaledScore_Total !== '-') {
-            if (!processedCbTests[row.AssessmentName]) { // Avoid processing the same test multiple times
-                const testQuestions = studentQuestionDetails.filter(q => q.AssessmentName === row.AssessmentName)
-                    .map(qRow => ({
-                        id: `${qRow.AssessmentName}-Q${qRow.QuestionSequenceInQuiz}`,
-                        subject: getSubjectFromSkillTag(qRow.SAT_Skill_Tag),
-                        skill: qRow.SAT_Skill_Tag,
-                        difficulty: qRow.Difficulty,
-                        yourAnswer: String(qRow.StudentAnswer),
-                        correctAnswer: (qRow.IsCorrect === true) ? String(qRow.StudentAnswer) : "Not provided in raw data", // Correct answer text not in this CSV
-                        isCorrect: qRow.IsCorrect,
-                        explanation: "No explanation provided in raw data.",
-                        yourTime: qRow.TimeSpentOnQuestion_Seconds,
-                        classAvgTime: qRow.TimeSpentOnQuestion_Seconds, // Assuming class average time is the same as student's for now or needs another source
-                        classPerformance: {
-                            correct: qRow.ClassAveragePoints_Question !== null && qRow.PointsPossible_Question !== null && qRow.PointsPossible_Question > 0 ?
-                                Math.round((qRow.ClassAveragePoints_Question / qRow.PointsPossible_Question) * 100) : 0,
-                            incorrect: 0, unanswered: 0 // Not available in this CSV
-                        },
-                        source: row.AssessmentSource,
-                        text: qRow.QuestionText_fromMetadata
-                    }));
+        if (row.AssessmentSource === mainCBTestSource && allOfficialCBTNames.includes(row.AssessmentName)) {
+            // Ensure total score is valid before considering it an attempted test
+            const totalScore = parseFloat(row.ScaledScore_Total);
+            if (!isNaN(totalScore) && totalScore > 0) { // Only process if there's a valid scaled total score
+                if (!processedCbTests[row.AssessmentName]) { // Avoid processing the same test multiple times
+                    const testQuestions = studentQuestionDetails.filter(q => q.AssessmentName === row.AssessmentName)
+                        .map(qRow => ({
+                            id: `${qRow.AssessmentName}-Q${qRow.QuestionSequenceInQuiz}`,
+                            subject: getSubjectFromSkillTag(qRow.SAT_Skill_Tag),
+                            skill: qRow.SAT_Skill_Tag,
+                            difficulty: qRow.Difficulty,
+                            yourAnswer: String(qRow.StudentAnswer),
+                            correctAnswer: (qRow.IsCorrect === true) ? String(qRow.StudentAnswer) : "Not provided in raw data", // Correct answer text not in this CSV
+                            isCorrect: qRow.IsCorrect,
+                            explanation: "No explanation provided in raw data.",
+                            yourTime: qRow.TimeSpentOnQuestion_Seconds,
+                            classAvgTime: qRow.TimeSpentOnQuestion_Seconds, // Assuming class average time is the same as student's for now or needs another source
+                            classPerformance: {
+                                correct: qRow.ClassAveragePoints_Question !== null && qRow.PointsPossible_Question !== null && qRow.PointsPossible_Question > 0 ?
+                                    Math.round((qRow.ClassAveragePoints_Question / qRow.PointsPossible_Question) * 100) : 0,
+                                incorrect: 0, unanswered: 0 // Not available in this CSV
+                            },
+                            source: row.AssessmentSource,
+                            text: qRow.QuestionText_fromMetadata
+                        }));
 
-                processedCbTests[row.AssessmentName] = {
-                    name: row.AssessmentName,
-                    displayName: ASSESSMENT_NAME_MAP[row.AssessmentName] || row.AssessmentName,
-                    date: row.AttemptDate,
-                    rw: row.ScaledScore_RW,
-                    math: row.ScaledScore_Math,
-                    total: row.ScaledScore_Total,
-                    classAvgTotal: row.ClassAverageScore_Normalized,
-                    classAvgRW: 'N/A', // Not available in headers
-                    classAvgMath: 'N/A', // Not available in headers
-                    questions: testQuestions
-                };
+                    processedCbTests[row.AssessmentName] = {
+                        name: row.AssessmentName,
+                        displayName: ASSESSMENT_NAME_MAP[row.AssessmentName] || row.AssessmentName,
+                        date: row.AttemptDate,
+                        rw: row.ScaledScore_RW,
+                        math: row.ScaledScore_Math,
+                        total: row.ScaledScore_Total,
+                        classAvgTotal: row.ClassAverageScore_Normalized,
+                        classAvgRW: 'N/A', // Not available in headers
+                        classAvgMath: 'N/A', // Not available in headers
+                        questions: testQuestions
+                    };
+                }
             }
         }
     });
@@ -494,7 +502,7 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
     // Khan Academy
     subjects.forEach(subject => {
         // Collect all possible Khan assessment names for this subject from the map
-        const subjectKhanNames = Object.keys(ASSESSMENT_NAME_MAP).filter(key => key.startsWith('Khan:') && getSubjectFromAssessmentName(key) === subject);
+        const subjectKhanNames = Object.keys(ASSESSMENT_NAME_MAP).filter(key => key.startsWith('Khan Academy:') && getSubjectFromAssessmentName(key) === subject);
 
         subjectKhanNames.forEach(rawName => {
             const questionsForAssessment = assessmentsBySourceAndName['Khan Academy Practice']?.[rawName];
@@ -1006,8 +1014,8 @@ function populatePracticeTestsTable(tests) {
         const mathScore = test.math !== null && test.math !== '-' ? test.math : '-';
 
         const classAvgTotal = test.classAvgTotal !== null && test.classAvgTotal !== '-' ? test.classAvgTotal : 'N/A';
-        const classAvgRW = test.classAvgRW !== null && test.classAvgRW !== '-' ? test.classAvgRW : 'N/A';
-        const classAvgMath = test.classAvgMath !== null && test.classAvgMath !== '-' ? test.classAvgMath : 'N/A';
+        const classAvgRW = test.classAvgRW !== null && test.classAvgRW !== '-' ? test.classAvgRW : 'N/A'; // Still N/A if not in source
+        const classAvgMath = test.classAvgMath !== null && test.classAvgMath !== '-' ? test.classAvgMath : 'N/A'; // Still N/A if not in source
 
         return `
         <tr class="${isAttempted ? 'clickable-row' : 'opacity-60'}" ${isAttempted ? `onclick="openTestQuestionsModal('${test.name}')"` : ''}>
@@ -1354,7 +1362,7 @@ function renderPacingBarChart(canvasId, questions) {
         const diff = (q.yourTime || 0) - (q.classAvgTime || 0);
         if (diff > 15) return '#dc3545';
         if (diff < -15) return '#28a745';
-        return '#4b5563';
+        return '#4b5266'; // Changed to a slightly darker shade to distinguish from 'performance-na'
     });
 
     const borderColors = questions.map(q => {
@@ -1385,7 +1393,7 @@ function renderPacingBarChart(canvasId, questions) {
                         label: function(context) {
                             if (context.dataset.label === 'Your Time (s)') {
                                 const qIndex = context.dataIndex;
-                                const difficulty = questions[qIndex]?.difficulty || 'N/A'; // Handle potential undefined difficulty
+                                const difficulty = (questions[qIndex] && questions[qIndex].difficulty) ? questions[qIndex].difficulty : 'N/A';
                                 return `${context.dataset.label}: ${context.parsed.y}s (Difficulty: ${difficulty})`;
                             }
                             return `${context.dataset.label}: ${context.parsed.y}s`;
