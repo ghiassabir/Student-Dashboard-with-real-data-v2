@@ -2,10 +2,6 @@
 'use strict';
 
 // Global data objects (initialized once, or re-initialized if explicitly needed by refresh)
-// Use 'var' for truly global variables to allow re-assignment without SyntaxError if the script
-// is somehow loaded multiple times, although this is generally discouraged.
-// A better approach is to ensure the script is only loaded once, or use an IIFE for encapsulation.
-// Given the persistent 'already declared' errors, we'll try to be more robust.
 window.dashboardData = window.dashboardData || {
     currentStudent: {
         name: "Loading Data...",
@@ -17,7 +13,7 @@ window.dashboardData = window.dashboardData || {
         cbPracticeTests: [],
         eocQuizzes: { reading: [], writing: [], math: [] },
         khanAcademy: { reading: [], writing: [], math: [] },
-        skills: { reading: [], writing: [], math: [] },
+        skills: { reading: [], writing: [] , math: [] }, // Added math to skills initialization for consistency
     },
     ALL_DASHBOARD_QUESTIONS: [],
     ALL_AGGREGATED_SCORES_RAW: [],
@@ -74,26 +70,38 @@ window.dashboardData = window.dashboardData || {
             "Understanding standard deviation, distributions (like normal distribution basics), and basic statistical inference": ["28: Statistics 2"],
             "Calculating the volume of 3D shapes (e.g., prisms, cylinders, cones, spheres)": ["29: Volume"]
         },
-        writing: [
-            "1: Transitions", "2: Specific Focus", "3: Sentences & Fragments",
-            "4: Joining & Separating Sentences", "5: Joining Sentences & Fragments",
-            "6: Non-Essential & Essential Clauses", "7: Additional Comma Uses & Misuses",
-            "8: Verbs Agreements and Tense", "9: Pronouns", "10: Apostrophes",
-            "11: Modification", "12: Parallel Structure", "13: Word Pairs", "14: Question Marks",
-            "Appendix: Parts of Speech"
-        ],
-        reading: [
-            "1: Overview of SAT Reading", "2: Vocabulary in Context", "3: Making the Leap",
-            "4: The Big Picture", "5: Literal Comprehension", "6: Reading for Function",
-            "7: Text Completions", "8: Supporting & Undermining", "9: Graphs & Charts",
-            "10: Paired Passages", "Appendix: Question Types"
-        ]
+        writing: { // Changed from Array to Object for consistency with Math if skill keys are needed
+            "1: Transitions": ["1: Transitions"], // Changed to object for consistency
+            "2: Specific Focus": ["2: Specific Focus"],
+            "3: Sentences & Fragments": ["3: Sentences & Fragments"],
+            "4: Joining & Separating Sentences": ["4: Joining & Separating Sentences"],
+            "5: Joining Sentences & Fragments": ["5: Joining Sentences & Fragments"],
+            "6: Non-Essential & Essential Clauses": ["6: Non-Essential & Essential Clauses"],
+            "7: Additional Comma Uses & Misuses": ["7: Additional Comma Uses & Misuses"],
+            "8: Verbs Agreements and Tense": ["8: Verbs Agreements and Tense"],
+            "9: Pronouns": ["9: Pronouns"],
+            "10: Apostrophes": ["10: Apostrophes"],
+            "11: Modification": ["11: Modification"],
+            "12: Parallel Structure": ["12: Parallel Structure"],
+            "13: Word Pairs": ["13: Word Pairs"],
+            "14: Question Marks": ["14: Question Marks"],
+            "Appendix: Parts of Speech": ["Appendix: Parts of Speech"]
+        },
+        reading: { // Changed from Array to Object for consistency
+            "1: Overview of SAT Reading": ["1: Overview of SAT Reading"],
+            "2: Vocabulary in Context": ["2: Vocabulary in Context"],
+            "3: Making the Leap": ["3: Making the Leap"],
+            "4: The Big Picture": ["4: The Big Picture"],
+            "5: Literal Comprehension": ["5: Literal Comprehension"],
+            "6: Reading for Function": ["6: Reading for Function"],
+            "7: Text Completions": ["7: Text Completions"],
+            "8: Supporting & Undermining": ["8: Supporting & Undermining"],
+            "9: Graphs & Charts": ["9: Graphs & Charts"],
+            "10: Paired Passages": ["10: Paired Passages"],
+            "Appendix: Question Types": ["Appendix: Question Types"]
+        }
     }
 };
-
-// Access global variables through window.dashboardData
-// e.g., window.dashboardData.currentStudent, window.dashboardData.ALL_DASHBOARD_QUESTIONS
-// This helps prevent 'already declared' errors.
 
 // --- Date Formatting Helper ---
 function formatDate(dateString) {
@@ -173,12 +181,14 @@ async function loadAndDisplayData(studentEmail = null) {
         // Determine which student's data to display
         let targetStudentGmailID = studentEmail;
         if (!targetStudentGmailID && window.dashboardData.ALL_UNIQUE_STUDENTS.length > 0) {
-            // Default to the first student found if no email is provided yet
-            targetStudentGmailID = window.dashboardData.ALL_UNIQUE_STUDENTS[0].email;
+            // If no email is provided (initial load without modal input), try to use 'aisha.m@example.com' if available
+            // or default to the first student found
+            const aisha = window.dashboardData.ALL_UNIQUE_STUDENTS.find(s => s.email.toLowerCase() === 'aisha.m@example.com');
+            targetStudentGmailID = aisha ? aisha.email : window.dashboardData.ALL_UNIQUE_STUDENTS[0].email;
         }
 
         if (!targetStudentGmailID) {
-            console.warn("No student email provided and no unique students found to display.");
+            console.warn("No student data available to display.");
             document.getElementById('studentNameDisplay').textContent = "No Student Data Found!";
             showEmailInputModal(); // Show modal if no student is found
             return;
@@ -187,6 +197,7 @@ async function loadAndDisplayData(studentEmail = null) {
         const transformedData = transformRawData(window.dashboardData.ALL_AGGREGATED_SCORES_RAW, window.dashboardData.ALL_QUESTION_DETAILS_RAW, targetStudentGmailID);
         window.dashboardData.currentStudent = transformedData; // Update global current student data
 
+        // Populate ALL_DASHBOARD_QUESTIONS with ALL questions from the current student
         window.dashboardData.ALL_DASHBOARD_QUESTIONS = [
             ...(window.dashboardData.currentStudent.cbPracticeTests.flatMap(t => t.questions || [])),
             ...(Object.values(window.dashboardData.currentStudent.eocQuizzes).flat().flatMap(q => q.questions || [])),
@@ -498,8 +509,13 @@ function transformRawData(aggregatedScoresData, questionDetailsData, targetStude
 
         console.log(`Processing EOC quiz from aggregated: "${quizName}" (Source: "${quizSource}")`);
 
-        const questionsForQuiz = questionsGroupedByAssessment[quizSource] && questionsGroupedByAssessment[quizSource][quizName] ?
-            questionsGroupedByAssessment[quizSource][quizName].map(qRow => {
+        // FIX: Match quiz questions using startsWith or includes based on the quiz name
+        // This is crucial for matching 'R-EOC-C8' with 'R-EOC-C8-Q1' etc.
+        const questionsForQuiz = Object.values(questionsGroupedByAssessment[quizSource] || {})
+            .flatMap(questionsArray => questionsArray.filter(qRow =>
+                qRow.AssessmentName && qRow.AssessmentName.trim().toLowerCase().startsWith(quizName.toLowerCase())
+            ))
+            .map(qRow => {
                 let isCorrectBoolean = false;
                 if (typeof qRow.IsCorrect === 'boolean') {
                     isCorrectBoolean = qRow.IsCorrect;
@@ -515,7 +531,7 @@ function transformRawData(aggregatedScoresData, questionDetailsData, targetStude
                 }
 
                 return {
-                    id: `${quizName}-${qRow.QuestionSequenceInQuiz}`,
+                    id: `${qRow.AssessmentName.trim()}-${qRow.QuestionSequenceInQuiz}`, // Use the actual detailed assessment name for question ID
                     subject: qRow.SAT_Skill_Tag && (qRow.SAT_Skill_Tag.includes("Math") ? "math" : qRow.SAT_Skill_Tag.includes("Reading") ? "reading" : qRow.SAT_Skill_Tag.includes("Writing") ? "writing" : "unknown"),
                     skill: qRow.SAT_Skill_Tag,
                     difficulty: qRow.Difficulty,
@@ -533,7 +549,7 @@ function transformRawData(aggregatedScoresData, questionDetailsData, targetStude
                     source: quizSource,
                     text: qRow.QuestionText_fromMetadata
                 };
-            }) : [];
+            });
 
         if(questionsForQuiz.length === 0){
             console.warn(`No question details found for EOC quiz "${quizName}" in studentQuestionDetails.`);
@@ -564,8 +580,12 @@ function transformRawData(aggregatedScoresData, questionDetailsData, targetStude
 
         console.log(`Processing Khan Academy quiz from aggregated: "${quizName}" (Source: "${quizSource}")`);
 
-        const questionsForQuiz = questionsGroupedByAssessment[quizSource] && questionsGroupedByAssessment[quizSource][quizName] ?
-            questionsGroupedByAssessment[quizSource][quizName].map(qRow => {
+        // FIX: Match quiz questions using startsWith or includes based on the quiz name
+        const questionsForQuiz = Object.values(questionsGroupedByAssessment[quizSource] || {})
+            .flatMap(questionsArray => questionsArray.filter(qRow =>
+                qRow.AssessmentName && qRow.AssessmentName.trim().toLowerCase().includes(quizName.toLowerCase())
+            ))
+            .map(qRow => {
                  let isCorrectBoolean = false;
                 if (typeof qRow.IsCorrect === 'boolean') {
                     isCorrectBoolean = qRow.IsCorrect;
@@ -580,7 +600,7 @@ function transformRawData(aggregatedScoresData, questionDetailsData, targetStude
                     classCorrect = Math.round((qRow.ClassAveragePoints_Question / qRow.PointsPossible_Question) * 100);
                 }
                 return {
-                    id: `${quizName}-${qRow.QuestionSequenceInQuiz}`,
+                    id: `${qRow.AssessmentName.trim()}-${qRow.QuestionSequenceInQuiz}`, // Use the actual detailed assessment name for question ID
                     subject: qRow.SAT_Skill_Tag && (qRow.SAT_Skill_Tag.includes("Math") ? "math" : qRow.SAT_Skill_Tag.includes("Reading") ? "reading" : qRow.SAT_Skill_Tag.includes("Writing") ? "writing" : "unknown"),
                     skill: qRow.SAT_Skill_Tag,
                     difficulty: qRow.Difficulty,
@@ -598,7 +618,7 @@ function transformRawData(aggregatedScoresData, questionDetailsData, targetStude
                     source: quizSource,
                     text: qRow.QuestionText_fromMetadata
                 };
-            }) : [];
+            });
 
         if(questionsForQuiz.length === 0){
             console.warn(`No question details found for Khan Academy quiz "${quizName}" in studentQuestionDetails.`);
@@ -721,7 +741,7 @@ function transformRawData(aggregatedScoresData, questionDetailsData, targetStude
     return transformedData;
 }
 
-// --- Modals and Detailed View Functions (UNCHANGED from previous response, copy/paste as is) ---
+// --- Modals and Detailed View Functions ---
 
 const modal = document.getElementById('detailModal');
 const modalTitle = document.getElementById('modalTitle');
@@ -776,7 +796,7 @@ function openTestQuestionsModal(testName) {
         content += `<div class="pacing-bar-chart-container"><canvas id="pacingBarChart"></canvas></div>`;
 
         const pacingRows = test.questions.map((p, index) => {
-            const diff = (p.yourTime || 0) - (p.classAvgTime || 0);
+            const diff = (p.yourTime || 0) - (p.classAvgTime || 0); // Handle potential null/undefined
             const status = diff > 15 ? 'Slower' : diff < -15 ? 'Faster' : 'On Pace';
             const statusClass = `pacing-${status.toLowerCase().replace(' ', '-')}`;
             return `<tr><td>${index + 1}</td><td>${p.yourTime || 'N/A'}s</td><td>${p.classAvgTime || 'N/A'}s</td><td><span class="pacing-badge ${statusClass}">${status}</span></td><td class="${p.isCorrect ? 'text-good' : 'text-poor'} font-semibold">${p.isCorrect ? 'Correct' : 'Incorrect'}</td></tr>`;
@@ -970,7 +990,14 @@ function renderDynamicCharts() {
             existingChart.destroy();
         }
 
-        const qIdToMatch = chartId.substring(chartId.indexOf('-') + 1 + chartId.substring(chartId.indexOf('-') + 1).indexOf('-') + 1);
+        // FIX: Corrected the substring logic for qIdToMatch
+        // The ID format is "chart-[uniqueIdPrefix]-[q.id]"
+        // Example: "chart-test-0-DG-T0-Q1" where q.id is "DG-T0-Q1"
+        // Example: "chart-skill-0-Punctuation (Commas)-Q1" where q.id is "Punctuation (Commas)-Q1"
+        const firstHyphen = chartId.indexOf('-');
+        const secondHyphen = chartId.indexOf('-', firstHyphen + 1);
+        const qIdToMatch = chartId.substring(secondHyphen + 1);
+
 
         // Access ALL_DASHBOARD_QUESTIONS via global object
         const qData = window.dashboardData.ALL_DASHBOARD_QUESTIONS.find(q => q.id === qIdToMatch);
