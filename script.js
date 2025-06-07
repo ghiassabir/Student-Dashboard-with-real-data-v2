@@ -55,6 +55,11 @@ let currentStudentData = {
 // Global array to hold all questions for easy access (will be populated from fetched data)
 let ALL_DASHBOARD_QUESTIONS = [];
 
+// Store all fetched raw data globally once, to avoid re-fetching on student change
+let ALL_AGGREGATED_SCORES_RAW = [];
+let ALL_QUESTION_DETAILS_RAW = [];
+let ALL_UNIQUE_STUDENTS = []; // To populate the dropdown
+
 // --- MAPPING SAT SKILLS TO BOOK CHAPTERS (extracted from your PDF) ---
 const SAT_CHAPTER_SKILL_MAPPING = {
     math: {
@@ -204,21 +209,41 @@ async function fetchCsvData(url) {
 /**
  * Orchestrates the fetching and processing of all data sources.
  * This is the main function to call when refreshing or initially loading data.
+ * @param {string} studentEmail - The email of the student to filter data for.
  */
-async function loadAndDisplayData() {
+async function loadAndDisplayData(studentEmail = null) {
     console.log("Loading and displaying data...");
     document.getElementById('studentNameDisplay').textContent = "Loading data...";
 
     try {
-        const aggregatedScoresData = await fetchCsvData(CSV_URLS.aggregatedScores);
-        const questionDetailsData = await fetchCsvData(CSV_URLS.questionDetails);
+        // Fetch data only once if not already stored
+        if (ALL_AGGREGATED_SCORES_RAW.length === 0 || ALL_QUESTION_DETAILS_RAW.length === 0) {
+            ALL_AGGREGATED_SCORES_RAW = await fetchCsvData(CSV_URLS.aggregatedScores);
+            ALL_QUESTION_DETAILS_RAW = await fetchCsvData(CSV_URLS.questionDetails);
+            ALL_UNIQUE_STUDENTS = getUniqueStudents(ALL_AGGREGATED_SCORES_RAW);
+            populateStudentFilter(ALL_UNIQUE_STUDENTS, studentEmail); // Pass initial studentEmail
+        }
 
-        const transformedData = transformRawData(aggregatedScoresData, questionDetailsData);
+        // Determine which student's data to display
+        let targetStudentGmailID;
+        if (studentEmail) {
+            targetStudentGmailID = studentEmail;
+        } else if (ALL_UNIQUE_STUDENTS.length > 0) {
+            targetStudentGmailID = document.getElementById('studentEmailFilter')?.value || ALL_UNIQUE_STUDENTS[0].email;
+        } else {
+            console.warn("No student data available to display.");
+            document.getElementById('studentNameDisplay').textContent = "No Student Data Found!";
+            return;
+        }
+
+
+        const transformedData = transformRawData(ALL_AGGREGATED_SCORES_RAW, ALL_QUESTION_DETAILS_RAW, targetStudentGmailID);
         currentStudentData = transformedData; // Update global data object
 
         ALL_DASHBOARD_QUESTIONS = [
             ...(currentStudentData.cbPracticeTests.flatMap(t => t.questions || [])),
-            ...(Object.values(currentStudentData.eocQuizzes).flat().flatMap(q => q.questions || []))
+            ...(Object.values(currentStudentData.eocQuizzes).flat().flatMap(q => q.questions || [])),
+            ...(Object.values(currentStudentData.khanAcademy).flat().flatMap(q => q.questions || [])) // Ensure Khan questions are also included
         ];
         console.log("ALL_DASHBOARD_QUESTIONS populated with:", ALL_DASHBOARD_QUESTIONS.length, "questions from fetched data.");
 
@@ -228,23 +253,19 @@ async function loadAndDisplayData() {
         populateOverview(currentStudentData);
         populatePracticeTestsTable(currentStudentData.cbPracticeTests);
 
+        // Populate EOC and Khan Academy for all subjects based on transformedData
         ['reading', 'writing', 'math'].forEach(subject => {
             populateEOCPractice(subject, currentStudentData.eocQuizzes[subject] || []);
             populateKhanAcademy(subject, currentStudentData.khanAcademy[subject] || []);
         });
 
+        // Re-render active tab content to ensure charts/tables refresh with new data
         const activeMainTab = document.querySelector('.main-tab-button.active');
         if (activeMainTab) {
             const targetTabName = activeMainTab.getAttribute('data-main-tab');
-            if (targetTabName === 'overview') {
-                initializeOverviewCharts(currentStudentData);
-            } else if (['reading', 'writing', 'math'].includes(targetTabName)) {
-                const firstSubTabButton = document.querySelector(`#${targetTabName}-content .sub-tab-button.active`);
-                if (firstSubTabButton) {
-                    const subject = targetTabName;
-                    populateSkillsHub(subject, currentStudentData.skills[subject] || []);
-                }
-            }
+            // Simulate a click on the active tab to re-render its content
+            // This is especially important for charts and sub-tabs that rely on currentStudentData
+            switchMainTab(activeMainTab); // Re-use existing switch function
         }
         console.log("Dashboard data loaded and displayed successfully.");
 
@@ -255,17 +276,74 @@ async function loadAndDisplayData() {
 }
 
 /**
+ * Extracts unique student emails and full names from aggregated scores.
+ * @param {Array<Object>} aggregatedScoresData - The raw aggregated scores data.
+ * @returns {Array<Object>} An array of objects, each with { email, fullName }.
+ */
+function getUniqueStudents(aggregatedScoresData) {
+    const studentsMap = new Map(); // Use Map to store unique students by email
+
+    aggregatedScoresData.forEach(row => {
+        const email = row.StudentGmailID;
+        const fullName = row.StudentFullName;
+        if (email && fullName && !studentsMap.has(email)) {
+            studentsMap.set(email, { email: email, fullName: fullName });
+        }
+    });
+    return Array.from(studentsMap.values());
+}
+
+/**
+ * Populates the student filter dropdown.
+ * @param {Array<Object>} students - Array of unique student objects.
+ * @param {string} selectedEmail - The email of the student that should be pre-selected.
+ */
+function populateStudentFilter(students, selectedEmail) {
+    const filterDropdown = document.getElementById('studentEmailFilter');
+    if (!filterDropdown) return;
+
+    filterDropdown.innerHTML = ''; // Clear existing options
+
+    // Sort students by full name for a better user experience
+    students.sort((a, b) => a.fullName.localeCompare(b.fullName));
+
+    students.forEach(student => {
+        const option = document.createElement('option');
+        option.value = student.email;
+        option.textContent = student.fullName;
+        if (student.email === selectedEmail) {
+            option.selected = true;
+        }
+        filterDropdown.appendChild(option);
+    });
+
+    // Add event listener if not already added (ensure it's only added once)
+    if (!filterDropdown.dataset.listenerAdded) {
+        filterDropdown.addEventListener('change', handleStudentFilterChange);
+        filterDropdown.dataset.listenerAdded = 'true';
+    }
+}
+
+/**
+ * Handles the change event for the student email filter dropdown.
+ */
+function handleStudentFilterChange() {
+    const selectedEmail = document.getElementById('studentEmailFilter').value;
+    console.log(`Student filter changed to: ${selectedEmail}`);
+    loadAndDisplayData(selectedEmail); // Reload data for the newly selected student
+}
+
+
+/**
  * Transforms raw CSV data into the structured currentStudentData object.
  * This is the core data processing logic.
- * @param {Array<Object>} aggregatedScoresData - Data from DashboardFeed_AggregatedScores.
- * @param {Array<Object>} questionDetailsData - Data from DashboardFeed_QuestionDetails.
+ * @param {Array<Object>} aggregatedScoresData - All raw aggregated scores data.
+ * @param {Array<Object>} questionDetailsData - All raw question details data.
+ * @param {string} targetStudentGmailID - The email of the student to filter data for.
  * @returns {Object} The transformed currentStudentData object.
  */
-function transformRawData(aggregatedScoresData, questionDetailsData) {
+function transformRawData(aggregatedScoresData, questionDetailsData, targetStudentGmailID) {
     console.log("Starting data transformation...");
-
-    const uniqueStudentGmailIDs = [...new Set(aggregatedScoresData.map(row => row.StudentGmailID))];
-    const targetStudentGmailID = uniqueStudentGmailIDs[0] || "default@example.com";
     console.log("Targeting data for student:", targetStudentGmailID);
 
     const studentAggregatedScores = aggregatedScoresData.filter(row => row.StudentGmailID === targetStudentGmailID);
@@ -308,7 +386,6 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
     };
 
     // --- Process CB Practice Tests from Aggregated Scores ---
-    // The filter condition was a bit off due to `||` operator precedence. It should be grouped.
     const cbTests = studentAggregatedScores.filter(row =>
         row.AssessmentSource === 'Canvas CB Test' && (row.AssessmentName && (row.AssessmentName.startsWith('CB-T') || row.AssessmentName.startsWith('DG-T0')))
     );
@@ -317,39 +394,35 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
         return a.AssessmentName.localeCompare(b.AssessmentName);
     });
 
-    const allOfficialCBTNames = [ // Ensure all 8 CB Tests are represented, even if not attempted
+    const allOfficialCBTNames = [
         "DG-T0", "CB-T1", "CB-T2", "CB-T3", "CB-T4", "CB-T5", "CB-T6", "CB-T7", "CB-T8", "CB-T9", "CB-T10"
     ];
 
     allOfficialCBTNames.forEach(testNameRaw => {
-        // Normalize testName from aggregated scores for consistent display (e.g., "CB-T4" becomes "CB Test 4")
         let normalizedTestName = testNameRaw;
         if (testNameRaw.startsWith('CB-T')) {
             normalizedTestName = testNameRaw.replace('CB-T', 'CB Test ').trim();
         } else if (testNameRaw === 'DG-T0') {
-            normalizedTestName = 'CB Test 0'; // Assuming DG-T0 maps to CB Test 0 for display
+            normalizedTestName = 'CB Test 0';
         }
 
         const foundTest = cbTests.find(t =>
-            t.AssessmentName && t.AssessmentName.trim().toLowerCase() === testNameRaw.toLowerCase() // Match original name
+            t.AssessmentName && t.AssessmentName.trim().toLowerCase() === testNameRaw.toLowerCase()
         );
 
         if (foundTest) {
             console.log(`Attempting to find questions for CB Test: ${foundTest.AssessmentName}`);
 
-            // FIX: Updated filtering logic to match section-level names
             const testQuestions = studentQuestionDetails.filter(q => {
                 const qAssessmentNameLower = q.AssessmentName ? q.AssessmentName.trim().toLowerCase() : '';
                 const foundTestNameLower = foundTest.AssessmentName ? foundTest.AssessmentName.trim().toLowerCase() : '';
-                const altDGTestNameLower = 'cbdbq01'; // The alternative name for DG-T0 in question details
+                const altDGTestNameLower = 'cbdbq01';
 
-                // Match if q.AssessmentName starts with foundTest.AssessmentName OR if it's the specific DG-T0/CBDBQ01 mapping
                 return (
                     qAssessmentNameLower.startsWith(foundTestNameLower) ||
                     (foundTestNameLower === 'dg-t0' && qAssessmentNameLower === altDGTestNameLower)
                 );
             }).map(qRow => {
-                // Ensure IsCorrect is a proper boolean
                 let isCorrectBoolean = false;
                 if (typeof qRow.IsCorrect === 'boolean') {
                     isCorrectBoolean = qRow.IsCorrect;
@@ -359,27 +432,16 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
                     isCorrectBoolean = qRow.IsCorrect === 1;
                 }
 
-                // Default correct answer if not explicitly provided and student was incorrect
-                // Assuming a 'CorrectAnswerText' column might exist. If not, this remains N/A.
                 const correctAnswerText = !isCorrectBoolean && qRow.CorrectAnswerText ? qRow.CorrectAnswerText : 'N/A';
 
-                // Calculate class performance percentages
                 let classCorrect = 0;
-                let classIncorrect = 0;
-                let classUnanswered = 0;
-                if (qRow.PointsPossible_Question > 0) {
-                    if (qRow.ClassAveragePoints_Question !== null) {
-                        const classAccuracy = (qRow.ClassAveragePoints_Question / qRow.PointsPossible_Question);
-                        classCorrect = Math.round(classAccuracy * 100);
-                        classIncorrect = 100 - classCorrect; // Simplified for display
-                        classUnanswered = 0; // Assuming all questions are attempted by class or default to 0
-                    }
+                if (qRow.PointsPossible_Question > 0 && qRow.ClassAveragePoints_Question !== null) {
+                    classCorrect = Math.round((qRow.ClassAveragePoints_Question / qRow.PointsPossible_Question) * 100);
                 }
 
 
                 return {
-                    // FIX: Ensure ID is consistent with what renderDynamicCharts expects
-                    id: `${foundTest.AssessmentName.trim()}-${qRow.QuestionSequenceInQuiz}`, // Use original test name for ID prefix
+                    id: `${foundTest.AssessmentName.trim()}-${qRow.QuestionSequenceInQuiz}`,
                     subject: qRow.SAT_Skill_Tag && (qRow.SAT_Skill_Tag.includes("Math") ? "math" : qRow.SAT_Skill_Tag.includes("Reading") ? "reading" : qRow.SAT_Skill_Tag.includes("Writing") ? "writing" : "unknown"),
                     skill: qRow.SAT_Skill_Tag,
                     difficulty: qRow.Difficulty,
@@ -388,11 +450,11 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
                     isCorrect: isCorrectBoolean,
                     explanation: "Explanation will go here if available from another source",
                     yourTime: qRow.TimeSpentOnQuestion_Seconds,
-                    classAvgTime: qRow.ClassAverageTime_Seconds, // Use ClassAverageTime_Seconds for pacing
+                    classAvgTime: qRow.ClassAverageTime_Seconds,
                     classPerformance: {
                         correct: classCorrect,
-                        incorrect: classIncorrect,
-                        unanswered: classUnanswered
+                        incorrect: 100 - classCorrect,
+                        unanswered: 0
                     },
                     source: foundTest.AssessmentSource,
                     text: qRow.QuestionText_fromMetadata
@@ -405,28 +467,26 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
                 console.log(`${testQuestions.length} section-level questions found for base test "${foundTest.AssessmentName}".`);
             }
 
-            // Also find the class average for the total score of this specific test from aggregated scores
             const classAvgTotalScore = studentAggregatedScores.find(s => s.AssessmentName && s.AssessmentName.trim().toLowerCase() === foundTest.AssessmentName.trim().toLowerCase())?.ClassAverageScore_Normalized;
 
 
             transformedData.cbPracticeTests.push({
-                name: normalizedTestName, // Use normalized name for display
+                name: normalizedTestName,
                 date: foundTest.AttemptDate,
                 rw: foundTest.ScaledScore_RW || "-",
                 math: foundTest.ScaledScore_Math || "-",
                 total: foundTest.ScaledScore_Total || "-",
-                classAvgTotal: classAvgTotalScore, // Add class average total score
+                classAvgTotal: classAvgTotalScore,
                 questions: testQuestions
             });
         } else {
-            // Add as "Not Attempted" with normalized name
             transformedData.cbPracticeTests.push({
                 name: normalizedTestName,
                 date: "Not Attempted",
                 rw: "-",
                 math: "-",
                 total: "-",
-                classAvgTotal: null, // No class average if not attempted
+                classAvgTotal: null,
                 questions: []
             });
         }
@@ -441,7 +501,7 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
         .map(t => t.total);
     transformedData.scoreTrend.classAvgScores = transformedData.cbPracticeTests
         .filter(t => t.date !== "Not Attempted" && t.total !== "-")
-        .map(t => t.classAvgTotal || null); // Use the new classAvgTotal property
+        .map(t => t.classAvgTotal || null);
 
 
     // --- Calculate Overall Scores and Latest Scores ---
@@ -452,39 +512,41 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
         transformedData.latestScores.math = latestTest.math;
     }
 
-    // --- Process EOC Quizzes and Khan Academy (Initial Structure) ---
-    const quizzesByAssessment = {};
+    // --- Process EOC Quizzes and Khan Academy ---
+    // This map will correctly group questions by their exact assessment name and source.
+    const questionsGroupedByAssessment = {};
     studentQuestionDetails.forEach(qRow => {
         const assessmentName = qRow.AssessmentName ? qRow.AssessmentName.trim() : null;
         const assessmentSource = qRow.AssessmentSource ? qRow.AssessmentSource.trim() : null;
 
-        if (!assessmentName || !assessmentSource) return; // Skip if missing essential info
+        if (!assessmentName || !assessmentSource) return;
 
-        if (!quizzesByAssessment[assessmentSource]) {
-            quizzesByAssessment[assessmentSource] = {};
+        if (!questionsGroupedByAssessment[assessmentSource]) {
+            questionsGroupedByAssessment[assessmentSource] = {};
         }
-        // FIX: Corrected object assignment for quiz questions if it doesn't exist
-        if (!quizzesByAssessment[assessmentSource][assessmentName]) {
-            quizzesByAssessment[assessmentSource][assessmentName] = [];
+        if (!questionsGroupedByAssessment[assessmentSource][assessmentName]) {
+            questionsGroupedByAssessment[assessmentSource][assessmentName] = [];
         }
-        quizzesByAssessment[assessmentSource][assessmentName].push(qRow);
+        questionsGroupedByAssessment[assessmentSource][assessmentName].push(qRow);
     });
 
-    // Get all unique EOC and Khan Academy assessment names from aggregated scores
-    const allEOCAssessments = aggregatedScoresData.filter(row =>
-        row.StudentGmailID === targetStudentGmailID && row.AssessmentSource === 'Canvas EOC Practice'
-    );
-    const allKhanAssessments = aggregatedScoresData.filter(row =>
-        row.StudentGmailID === targetStudentGmailID && row.AssessmentSource === 'Khan Academy Practice'
-    );
+    // Process EOC Assessments from aggregated scores
+    const eocAggregatedAssessments = studentAggregatedScores.filter(row => row.AssessmentSource === 'Canvas EOC Practice');
 
-    // Populate EOC Quizzes
-    allEOCAssessments.forEach(aggQuiz => {
+    // FIX: Iterate through all possible EOC quizzes (from chapters or a predefined list)
+    // For now, let's process the ones present in aggregated scores for the student.
+    // To show ALL chapters even if unattempted, you'd need a separate master list of all chapters.
+    eocAggregatedAssessments.forEach(aggQuiz => {
         const quizName = aggQuiz.AssessmentName.trim();
         const quizSource = aggQuiz.AssessmentSource.trim();
+        const subjectCategoryEOC = quizName.toLowerCase().includes('r-eoc') ? 'reading' :
+                                   quizName.toLowerCase().includes('w-eoc') ? 'writing' :
+                                   quizName.toLowerCase().includes('m-eoc') ? 'math' : 'unknown';
 
-        const questionsForQuiz = quizzesByAssessment[quizSource] && quizzesByAssessment[quizSource][quizName] ?
-            quizzesByAssessment[quizSource][quizName].map(qRow => {
+        console.log(`Processing EOC quiz from aggregated: "${quizName}" (Source: "${quizSource}")`);
+
+        const questionsForQuiz = questionsGroupedByAssessment[quizSource] && questionsGroupedByAssessment[quizSource][quizName] ?
+            questionsGroupedByAssessment[quizSource][quizName].map(qRow => {
                 let isCorrectBoolean = false;
                 if (typeof qRow.IsCorrect === 'boolean') {
                     isCorrectBoolean = qRow.IsCorrect;
@@ -520,29 +582,37 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
                 };
             }) : [];
 
-        // Determine subject category for EOC
-        const subjectCategoryEOC = quizName.toLowerCase().includes('r-eoc') ? 'reading' :
-                                   quizName.toLowerCase().includes('w-eoc') ? 'writing' :
-                                   quizName.toLowerCase().includes('m-eoc') ? 'math' : 'unknown';
+        if(questionsForQuiz.length === 0){
+            console.warn(`No question details found for EOC quiz "${quizName}" in studentQuestionDetails.`);
+        } else {
+            console.log(`${questionsForQuiz.length} questions found for EOC quiz "${quizName}".`);
+        }
 
         if (transformedData.eocQuizzes[subjectCategoryEOC]) {
             transformedData.eocQuizzes[subjectCategoryEOC].push({
                 name: quizName,
                 date: aggQuiz.AttemptDate || "N/A",
                 latestScore: aggQuiz.Score_Percentage !== null ? `${aggQuiz.Score_Percentage}% (${aggQuiz.Score_Raw_Combined}/${aggQuiz.PointsPossible_Combined})` : "N/A",
-                classAvgScore: aggQuiz.ClassAverageScore_Normalized, // Add class avg for EOC quiz
+                classAvgScore: aggQuiz.ClassAverageScore_Normalized,
                 questions: questionsForQuiz
             });
         }
     });
 
-    // Populate Khan Academy Quizzes
-    allKhanAssessments.forEach(aggQuiz => {
+    // Process Khan Academy Assessments from aggregated scores
+    const khanAggregatedAssessments = studentAggregatedScores.filter(row => row.AssessmentSource === 'Khan Academy Practice');
+
+    khanAggregatedAssessments.forEach(aggQuiz => {
         const quizName = aggQuiz.AssessmentName.trim();
         const quizSource = aggQuiz.AssessmentSource.trim();
+        const khanSubject = quizName.toLowerCase().includes('reading') ? 'reading' :
+                            quizName.toLowerCase().includes('writing') || quizName.toLowerCase().includes('grammar') ? 'writing' :
+                            quizName.toLowerCase().includes('math') || quizName.toLowerCase().includes('algebra') || quizName.toLowerCase().includes('geometry') ? 'math' : 'unknown';
 
-        const questionsForQuiz = quizzesByAssessment[quizSource] && quizzesByAssessment[quizSource][quizName] ?
-            quizzesByAssessment[quizSource][quizName].map(qRow => {
+        console.log(`Processing Khan Academy quiz from aggregated: "${quizName}" (Source: "${quizSource}")`);
+
+        const questionsForQuiz = questionsGroupedByAssessment[quizSource] && questionsGroupedByAssessment[quizSource][quizName] ?
+            questionsGroupedByAssessment[quizSource][quizName].map(qRow => {
                  let isCorrectBoolean = false;
                 if (typeof qRow.IsCorrect === 'boolean') {
                     isCorrectBoolean = qRow.IsCorrect;
@@ -577,16 +647,18 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
                 };
             }) : [];
 
-        const khanSubject = quizName.toLowerCase().includes('reading') ? 'reading' :
-                            quizName.toLowerCase().includes('writing') || quizName.toLowerCase().includes('grammar') ? 'writing' :
-                            quizName.toLowerCase().includes('math') || quizName.toLowerCase().includes('algebra') || quizName.toLowerCase().includes('geometry') ? 'math' : 'unknown';
+        if(questionsForQuiz.length === 0){
+            console.warn(`No question details found for Khan Academy quiz "${quizName}" in studentQuestionDetails.`);
+        } else {
+            console.log(`${questionsForQuiz.length} questions found for Khan Academy quiz "${quizName}".`);
+        }
 
         if (transformedData.khanAcademy[khanSubject]) {
             transformedData.khanAcademy[khanSubject].push({
                 name: quizName,
                 date: aggQuiz.AttemptDate || "N/A",
                 latestScore: aggQuiz.Score_Percentage !== null ? `${aggQuiz.Score_Percentage}% (${aggQuiz.Score_Raw_Combined}/${aggQuiz.PointsPossible_Combined})` : "N/A",
-                classAvgScore: aggQuiz.ClassAverageScore_Normalized, // Add class avg for Khan quiz
+                classAvgScore: aggQuiz.ClassAverageScore_Normalized,
                 questions: questionsForQuiz
             });
         }
@@ -700,13 +772,7 @@ function transformRawData(aggregatedScoresData, questionDetailsData) {
     return transformedData;
 }
 
-// --- Rest of your existing script.js code remains here ---
-// (setupEventListeners, populateOverview, initializeOverviewCharts,
-// populateSkillsHub, populatePracticeTestsTable, populateEOCPractice,
-// populateKhanAcademy, modal functions, renderQuestionAnalysisCard,
-// getChaptersForSkill, renderDynamicCharts, renderPacingBarChart,
-// addExplanationToggleListeners)
-
+// --- Event Listeners and Initial Load ---
 document.addEventListener('DOMContentLoaded', function () {
     // --- Chart.js Global Configuration ---
     Chart.defaults.font.family = 'Inter';
@@ -714,16 +780,11 @@ document.addEventListener('DOMContentLoaded', function () {
     Chart.defaults.responsive = true;
     Chart.defaults.maintainAspectRatio = false;
 
+    // Initial load without a specific student email, it will pick the first unique student
     loadAndDisplayData();
-    setupEventListeners();
+    setupEventListeners(); // Set up all event listeners after initial data load initiation
 });
 
-// All functions below this point are unchanged from your last provided code.
-// (setupEventListeners, populateOverview, initializeOverviewCharts,
-// populateSkillsHub, populatePracticeTestsTable, populateEOCPractice,
-// populateKhanAcademy, modal functions, renderQuestionAnalysisCard,
-// getChaptersForSkill, renderDynamicCharts, renderPacingBarChart,
-// addExplanationToggleListeners)
 
 /**
  * Sets up all the interactive elements like tabs, mobile menu, and the refresh button.
@@ -734,11 +795,15 @@ function setupEventListeners() {
     const hamburgerButton = document.getElementById('hamburgerButton');
     const mobileMenu = document.getElementById('mobileMenu');
     const refreshDataBtn = document.getElementById('refreshDataBtn');
+    const studentEmailFilter = document.getElementById('studentEmailFilter');
+
 
     document.getElementById('currentYear').textContent = new Date().getFullYear();
 
     hamburgerButton?.addEventListener('click', () => mobileMenu?.classList.toggle('hidden'));
     refreshDataBtn?.addEventListener('click', handleRefreshData);
+
+    // The studentEmailFilter event listener is now set in populateStudentFilter to ensure it's on the right element.
 
     /**
      * Handles switching between main tabs.
@@ -762,7 +827,7 @@ function setupEventListeners() {
             initializeOverviewCharts(currentStudentData);
         } else if (['reading', 'writing', 'math'].includes(targetTabName)) {
             // For subject tabs, activate the default sub-tab (Skills Hub)
-            const firstSubTabButton = document.querySelector(`#${targetTabName}-content .sub-tab-button[data-sub-tab="${targetTabName}-skills-hub"]`);
+            const firstSubTabButton = document.querySelector(`#${targetTabName}-content .sub-tab-button`); // Select first sub-tab button
             if (firstSubTabButton) {
                 switchSubTab(firstSubTabButton); // Programmatically click it
             }
@@ -801,6 +866,12 @@ function setupEventListeners() {
         if (targetSubTabName.endsWith('-skills-hub')) {
             const subject = targetSubTabName.replace('-skills-hub', '');
             populateSkillsHub(subject, currentStudentData.skills[subject] || []);
+        } else if (targetSubTabName.endsWith('-eoc')) {
+            const subject = targetSubTabName.replace('-eoc', '');
+            populateEOCPractice(subject, currentStudentData.eocQuizzes[subject] || []);
+        } else if (targetSubTabName.endsWith('-khan')) {
+            const subject = targetSubTabName.replace('-khan', '');
+            populateKhanAcademy(subject, currentStudentData.khanAcademy[subject] || []);
         }
     };
 
@@ -819,6 +890,9 @@ function setupEventListeners() {
 function handleRefreshData() {
     console.log("Refresh Data button clicked! Initiating data reload.");
     alert("Refreshing data from Google Sheets...");
+    // Clear raw data caches to force re-fetch
+    ALL_AGGREGATED_SCORES_RAW = [];
+    ALL_QUESTION_DETAILS_RAW = [];
     loadAndDisplayData(); // Re-fetch and re-display all data
 }
 
@@ -832,7 +906,7 @@ function populateOverview(data) {
         <div class="score-card"><h3 class="text-md font-medium text-gray-600">Latest Total Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.total} <span class="text-lg text-gray-500">/ 1600</span></p></div>
         <div class="score-card"><h3 class="text-md font-medium text-gray-600">Latest R&W Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.rw} <span class="text-lg text-gray-500">/ 800</span></p></div>
         <div class="score-card"><h3 class="text-md font-medium text-gray-600">Latest Math Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.math} <span class="text-lg text-gray-500">/ 800</span></p></div>
-        <div class="score-card"><h3 class="text-md font-medium text-gray-600">Avg EOC Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.avgEocKhan}%</p></div>
+        <div class="score-card"><h3 class="text-md font-medium text-gray-600">Avg EOC/KA Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.avgEocKhan}%</p></div>
         <div class="score-card"><h3 class="text-md font-medium text-gray-600">Your Target Score</h3><p class="text-3xl font-bold" style="color: #8a3ffc;">${data.targetScore}</p></div>`;
 
     // Populate Strengths & Weaknesses
@@ -1184,8 +1258,6 @@ function populateKhanAcademy(subject, khanData) {
         return;
     }
 
-    // You can iterate and display assignments here, similar to EOC practice.
-    // Example:
     let htmlContent = `<div class="overflow-x-auto"><table class="min-w-full table"><thead><tr><th>Assignment Name</th><th>Date Attempted</th><th>Latest Score</th><th>Class Avg Score</th></tr></thead><tbody>`;
     htmlContent += khanData.map(assignment => {
         const isAttempted = assignment.date && assignment.date !== "Not Attempted" && assignment.date !== "-";
@@ -1208,9 +1280,8 @@ function populateKhanAcademy(subject, khanData) {
         }
         const classAvgDisplay = classAvgScoreValue !== null ? `<span class="${classAvgColor}">${classAvgScoreValue}% ${classAvgArrow}</span>` : 'N/A';
 
-
         return `
-            <tr class="${isAttempted ? 'clickable-row' : 'opacity-60'}" ${isAttempted ? `onclick="alert('Details for ${assignment.name}')"` : ''}>
+            <tr class="${isAttempted ? 'clickable-row' : 'opacity-60'}" ${isAttempted ? `onclick="openKhanAcademyQuizQuestionsModal('${assignment.name}', '${subject}')"` : ''}>
                 <td>${assignment.name}</td>
                 <td>${formatDate(assignment.date)}</td>
                 <td>${assignment.latestScore}</td>
@@ -1317,6 +1388,31 @@ function openEOCQuizQuestionsModal(quizName, subject) {
     }
 
     let content = quiz.questions.map((q, index) => renderQuestionAnalysisCard(q, `eoc-${index}`, false)).join('');
+
+    modalBody.innerHTML = content;
+    modal.style.display = "block";
+    renderDynamicCharts();
+    addExplanationToggleListeners();
+}
+
+/**
+ * Opens the modal to show ALL questions for a specific Khan Academy Quiz.
+ * Pacing data is NOT included for Khan Academy quizzes.
+ * @param {string} quizName - The name of the Khan Academy quiz.
+ * @param {string} subject - The subject of the Khan Academy quiz.
+ */
+function openKhanAcademyQuizQuestionsModal(quizName, subject) {
+    modalTitle.textContent = `Reviewing Khan Academy Quiz: ${quizName} (${subject.charAt(0).toUpperCase() + subject.slice(1)})`;
+    const quizzesForSubject = currentStudentData.khanAcademy[subject] || [];
+    const quiz = quizzesForSubject.find(q => q.name === quizName);
+
+    if (!quiz || !quiz.questions || quiz.questions.length === 0) {
+        modalBody.innerHTML = `<p class="text-center p-5 text-gray-600">No questions found for ${quizName}.</p>`;
+        modal.style.display = "block";
+        return;
+    }
+
+    let content = quiz.questions.map((q, index) => renderQuestionAnalysisCard(q, `khan-${index}`, false)).join('');
 
     modalBody.innerHTML = content;
     modal.style.display = "block";
@@ -1449,29 +1545,15 @@ function renderDynamicCharts() {
             existingChart.destroy();
         }
 
-        // Extract original question ID from the chartId more reliably
-        // The ID format is expected to be "prefix-testname-questionsequence" or "prefix-quizname-questionsequence"
-        // Example: "chart-test-4-CB-T4-M1-Q1" => "CB-T4-M1-Q1"
-        // Example: "chart-skill-0-M-EOC-C5-RatioProportion-Q1" => "M-EOC-C5-RatioProportion-Q1"
-
         // The ID of the actual question object stored in ALL_DASHBOARD_QUESTIONS is generated as:
         // `${testName.trim()}-${qRow.QuestionSequenceInQuiz}` for CB tests (e.g. "CB-T4-Q1")
         // `${quizName}-${qRow.QuestionSequenceInQuiz}` for EOC/Khan (e.g. "M-EOC-C5-RatioProportion-Q1")
+        // We need to extract this `q.id` from the `chartId` which is in format "chart-prefix-q.id"
 
-        // Let's refine the extraction to correctly match these IDs.
-        // The `uniqueIdPrefix` from renderQuestionAnalysisCard is either "skill-index" or "test-index" or "eoc-index"
-        // The actual assessment name (like CB-T4, M-EOC-C5-RatioProportion) is part of the `q.id` itself.
-        // We need to parse the `chartId` to get the `q.id` that was used to create the question object.
+        const qIdToMatch = chartId.substring(chartId.indexOf('-') + 1 + chartId.substring(chartId.indexOf('-') + 1).indexOf('-') + 1);
+        // Example: "chart-test-4-CB-T4-Q1" -> "CB-T4-Q1"
+        // Example: "chart-eoc-0-M-EOC-C5-RatioProportion-Q1" -> "M-EOC-C5-RatioProportion-Q1"
 
-        // Simpler approach: `renderQuestionAnalysisCard` passes `q.id` directly as part of the canvas ID.
-        // Let's ensure q.id has the full AssessmentName + QuestionSequence.
-        // In renderQuestionAnalysisCard, `id: `${foundTest.AssessmentName.trim()}-${qRow.QuestionSequenceInQuiz}`` is used.
-        // So the chart ID will look like `chart-skill-0-CB-T4-Q1` if `q.id` is `CB-T4-Q1`.
-
-        const parts = chartId.split('-');
-        // Reconstruct the `q.id` that exists in ALL_DASHBOARD_QUESTIONS
-        // Assuming the actual question ID is the part after the initial prefix like "chart-skill-X-" or "chart-test-X-"
-        let qIdToMatch = parts.slice(2).join('-'); // e.g., for "chart-skill-0-CB-T4-Q1", this becomes "CB-T4-Q1"
 
         const qData = ALL_DASHBOARD_QUESTIONS.find(q => q.id === qIdToMatch);
 
