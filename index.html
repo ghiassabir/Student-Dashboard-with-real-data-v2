@@ -19,7 +19,12 @@
                 <h1 class="sathub-header-title text-xl md:text-2xl font-bold">Analytics Hub</h1>
             </div>
             <div class="flex items-center space-x-4">
-                <span id="studentNameDisplay" class="text-sm hidden sm:block">Welcome! Alex Johnson</span>
+                <div class="text-white text-sm flex items-center space-x-2">
+                    <label for="studentEmailFilter" class="font-semibold hidden sm:block">Select Student:</label>
+                    <select id="studentEmailFilter" class="bg-gray-700 text-white p-1 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </select>
+                </div>
+                <span id="studentNameDisplay" class="text-sm hidden sm:block">Welcome!</span>
                 <button id="refreshDataBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-md text-sm">
                     Refresh Data
                 </button>
@@ -74,7 +79,7 @@
             </section>
         </div>
 
-        <div id="cb-practice-tests-content" class="main-tab-content hidden"><section class="themed-card"><div class="themed-card-title-strip">CB Non-Adaptive Tests</div><div class="themed-card-body overflow-x-auto"><table class="min-w-full table"><thead><tr><th>Test Name</th><th>Date Attempted</th><th>R&W Score</th><th>Math Score</th><th>Total Score</th></tr></thead><tbody id="cb-practice-tests-table-body"></tbody></table></div></section></div>
+        <div id="cb-practice-tests-content" class="main-tab-content hidden"><section class="themed-card"><div class="themed-card-title-strip">CB Non-Adaptive Tests</div><div class="themed-card-body overflow-x-auto"><table class="min-w-full table"><thead><tr><th>Test Name</th><th>Date Attempted</th><th>R&W Score</th><th>Math Score</th><th>Total Score</th><th>Class Avg R&W</th><th>Class Avg Math</th><th>Class Avg Total</th></tr></thead><tbody id="cb-practice-tests-table-body"></tbody></table></div></section></div>
         
         <div id="reading-content" class="main-tab-content hidden space-y-6">
             <div class="flex flex-wrap space-x-2 mb-4 border-b pb-2">
