@@ -1,10 +1,10 @@
-// --- Initial Data Structure & Global Variables ---
-// This currentStudentData object will be populated with fetched and transformed data.
+// --- DUMMY DATA (Will be replaced by fetched data) ---
+// Keep the structure for reference, but its values will be overridden.
 let currentStudentData = {
     name: "Loading Data...", // Initial placeholder
-    targetScore: 1400, // Default target score
-    latestScores: { total: 0, rw: 0, math: 0, avgEocKhan: 0, classAvgTotal: 'N/A', classAvgRW: 'N/A', classAvgMath: 'N/A', classAvgEocKhan: 'N/A' },
-    timeSpent: { studentAvg: 0, studentUnit: "min / assessment", classAvg: 0, classUnit: "min / assessment"},
+    targetScore: 1400, // This can be hardcoded or fetched if available in CSV
+    latestScores: { total: 0, rw: 0, math: 0, avgEocKhan: 0 },
+    timeSpent: { studentAvg: 0, studentUnit: "min / day", classAvg: 0, classUnit: "min / day"},
     scoreTrend: { labels: [], studentScores: [], classAvgScores: [] },
     overallSkillPerformance: { labels: [], studentAccuracy: [], classAvgAccuracy: [] },
 
@@ -19,13 +19,12 @@ let currentStudentData = {
         writing: [],
         math: []
     },
-    skills: { // Will be populated by subject
+    skills: {
         reading: [],
         writing: [],
         math: []
     },
-    // Static mapping of chapters (from your previous code)
-    chapters: {
+    chapters: { // This mapping is static and can remain as is
         math: [
             "1: Exponents & Radicals", "2: Percent", "3: Exponential & Linear Growth",
             "4: Rates", "5: Ratio & Proportion", "6: Expressions", "7: Constructing Models",
@@ -46,17 +45,15 @@ let currentStudentData = {
         ],
         reading: [
             "1: Overview of SAT Reading", "2: Vocabulary in Context", "3: Making the Leap",
-            "4: The Big Picture", "5: Literal Comprehension",
-            "6: Reading for Function", "7: Text Completions", "8: Supporting & Undermining",
-            "9: Graphs & Charts", "10: Paired Passages", "Appendix: Question Types"
+            "4: The Big Picture", "5: Literal Comprehension", "6: Reading for Function",
+            "7: Text Completions", "8: Supporting & Undermining", "9: Graphs & Charts",
+            "10: Paired Passages", "Appendix: Question Types"
         ]
     }
 };
 
-// Global array to hold all questions for easy access (populated after data transformation)
+// Global array to hold all questions for easy access (will be populated from fetched data)
 let ALL_DASHBOARD_QUESTIONS = [];
-// Global array to store unique student email IDs for the filter
-let allStudentEmails = [];
 
 // --- MAPPING SAT SKILLS TO BOOK CHAPTERS (extracted from your PDF) ---
 const SAT_CHAPTER_SKILL_MAPPING = {
@@ -144,138 +141,15 @@ const SAT_CHAPTER_SKILL_MAPPING = {
     }
 };
 
-// --- Helper for Mapping Raw Assessment Names to Friendly Names (EOC, Khan, CB Tests) ---
-const ASSESSMENT_NAME_MAP = {
-    // Reading EOC
-    "R-EOC-C1-OverviewSATReading": "Reading: Overview of SAT Reading",
-    "R-EOC-C2-VocabInContext": "Reading: Vocabulary in Context",
-    "R-EOC-C3-MakingTheLeap": "Reading: Making the Leap",
-    "R-EOC-C4-TheBigPicture": "Reading: The Big Picture",
-    "R-EOC-C5-LiteralComprehension": "Reading: Literal Comprehension",
-    "R-EOC-C6-ReadingForFunction": "Reading: Reading for Function",
-    "R-EOC-C7-TextCompletions": "Reading: Text Completions",
-    "R-EOC-C8-SupportingUndermining": "Reading: Supporting & Undermining",
-    "R-EOC-C9-GraphsCharts": "Reading: Graphs & Charts",
-    "R-EOC-C10-PairedPassages": "Reading: Paired Passages",
-    // Writing EOC
-    "W-EOC-C1-Transitions": "Writing: Transitions",
-    "W-EOC-C2-SpecificFocus": "Writing: Specific Focus",
-    "W-EOC-C3-SentencesFragments": "Writing: Sentences & Fragments",
-    "W-EOC-C4-JoiningSeparating": "Writing: Joining & Separating Sentences",
-    "W-EOC-C5-JoiningSentencesFragments": "Writing: Joining Sentences & Fragments",
-    "W-EOC-C6-NonEssentialEssential": "Writing: Non-Essential & Essential Clauses",
-    "W-EOC-C7-VerbAgreement": "Writing: Verbs Agreements and Tense",
-    "W-EOC-C8-Pronouns": "Writing: Pronouns",
-    "W-EOC-C9-Apostrophes": "Writing: Apostrophes",
-    "W-EOC-C10-Modification": "Writing: Modification",
-    "W-EOC-C11-ParallelStructure": "Writing: Parallel Structure",
-    "W-EOC-C12-WordPairs": "Writing: Word Pairs",
-    "W-EOC-C13-QuestionMarks": "Writing: Question Marks",
-    // Math EOC
-    "M-EOC-C1-ExponentsRadicals": "Math: Exponents & Radicals",
-    "M-EOC-C2-Percent": "Math: Percent",
-    "M-EOC-C3-ExponentialLinearGrowth": "Math: Exponential & Linear Growth",
-    "M-EOC-C4-Rates": "Math: Rates",
-    "M-EOC-C5-RatioProportion": "Math: Ratio & Proportion",
-    "M-EOC-C6-Expressions": "Math: Expressions",
-    "M-EOC-C7-ConstructingModels": "Math: Constructing Models",
-    "M-EOC-C8-ManipulatingSolvingEquations": "Math: Manipulating & Solving Equations",
-    "M-EOC-C9-MoreEquationSolving": "Math: More Equation Solving Strategies",
-    "M-EOC-C10-SystemsOfEquations": "Math: Systems of Equations",
-    "M-EOC-C11-Inequalities": "Math: Inequalities",
-    "M-EOC-C12-WordProblems": "Math: Word Problems",
-    "M-EOC-C13-MinMaxWordProblems": "Math: Min & Max Word Problems",
-    "M-EOC-C14-Lines": "Math: Lines",
-    "M-EOC-C15-InterpretingLinearModels": "Math: Interpreting Linear Models",
-    "M-EOC-C16-Functions": "Math: Functions",
-    "M-EOC-C17-Quadratics": "Math: Quadratics",
-    "M-EOC-C18-SyntheticDivision": "Math: Synthetic Division",
-    "M-EOC-C19-ComplexNumbers": "Math: Complex Numbers",
-    "M-EOC-C20-AbsoluteValue": "Math: Absolute Value",
-    "M-EOC-C21-Angles": "Math: Angles",
-    "M-EOC-C22-Triangles": "Math: Triangles",
-    "M-EOC-C23-Circles": "Math: Circles",
-    "M-EOC-C24-Trigonometry": "Math: Trigonometry",
-    "M-EOC-C25-ReadingData": "Math: Reading Data",
-    "M-EOC-C26-Probability": "Math: Probability",
-    "M-EOC-C27-Statistics1": "Math: Statistics 1",
-    "M-EOC-C28-Statistics2": "Math: Statistics 2",
-    "M-EOC-C29-Volume": "Math: Volume",
-    // Khan Academy (example mapping, expand as needed)
-    "Khan: Writing - Transitions Master": "Khan Academy: Transitions Master",
-    "Khan: Grammar - Punctuation Rules": "Khan Academy: Punctuation Rules",
-    "Khan: Reading - Inference Drill": "Khan Academy: Inference Drill",
-    "Khan: Geometry Shape Problems": "Khan Academy: Geometry Problems",
-    "Khan: Algebra Foundations Quiz": "Khan Academy: Algebra Foundations",
-    "Khan: Vocab Power Practice": "Khan Academy: Vocabulary Power",
-    // CB Test friendly names (from your feedback)
-    "DG-T0": "Diagnostic Test",
-    "CB-T4": "CB Test 4",
-    "CB-T5": "CB Test 5",
-    "CB-T6": "CB Test 6",
-    "CB-T7": "CB Test 7",
-    "CB-T8": "CB Test 8",
-    "CB-T9": "CB Test 9",
-    "CB-T10": "CB Test 10",
-    "CBDBQ01": "Diagnostic Practice Quiz" // Changed from Test to Quiz as it appears in EOC context
-};
 
-// Global array to hold all questions for easy access (populated after data transformation)
-let ALL_DASHBOARD_QUESTIONS = [];
-// Global array to store unique student email IDs for the filter
-let allStudentEmails = [];
-
-// --- Helper Functions ---
-
-// Helper to determine subject from skill tag
-function getSubjectFromSkillTag(skillTag) {
-    if (!skillTag || typeof skillTag !== 'string' || skillTag.includes('TBD_No_Correlation_Or_CustomQID')) return 'unknown';
-    const lowerSkill = skillTag.toLowerCase();
-    if (lowerSkill.includes('reading') || lowerSkill.includes('paired passages') || lowerSkill.includes('text completions') || lowerSkill.includes('main idea') || lowerSkill.includes('vocabulary in context') || lowerSkill.includes('literal') || lowerSkill.includes('big picture') || lowerSkill.includes('graphs')) return 'reading';
-    if (lowerSkill.includes('writing') || lowerSkill.includes('grammar') || lowerSkill.includes('punctuation') || lowerSkill.includes('transitions') || lowerSkill.includes('sentence structure') || lowerSkill.includes('conventions') || lowerSkill.includes('expression of ideas')) return 'writing';
-    if (lowerSkill.includes('math') || lowerSkill.includes('algebra') || lowerSkill.includes('geometry') || lowerSkill.includes('equations') || lowerSkill.includes('functions') || lowerSkill.includes('statistics') || lowerSkill.includes('numbers') || lowerSkill.includes('data analysis') || lowerSkill.includes('problem solving')) return 'math';
-    return 'unknown';
-}
-
-// Helper to determine subject from assessment name for EOC/Khan
-function getSubjectFromAssessmentName(assessmentName) {
-    if (!assessmentName || typeof assessmentName !== 'string') return 'unknown';
-    const lowerName = assessmentName.toLowerCase();
-    if (lowerName.startsWith('r-eoc') || lowerName.includes('reading')) return 'reading';
-    if (lowerName.startsWith('w-eoc') || lowerName.includes('writing') || lowerName.includes('grammar')) return 'writing';
-    if (lowerName.startsWith('m-eoc') || lowerName.includes('math') || lowerName.includes('algebra') || lowerName.includes('geometry')) return 'math';
-    return 'unknown';
-}
-
-// Helper for color-coded arrows based on student vs class performance
-function getPerformanceArrow(studentScore, classAvg) {
-    // Ensure scores are numbers for comparison, return empty if invalid
-    const sScore = parseFloat(studentScore);
-    const cAvg = parseFloat(classAvg);
-
-    if (isNaN(sScore) || isNaN(cAvg)) return '';
-    if (sScore > cAvg) return '<span class="text-good">↑</span>';
-    if (sScore < cAvg) return '<span class="text-poor">↓</span>';
-    return ''; // No arrow if equal
-}
-
-// Date Formatting Helper
+// --- Date Formatting Helper ---
 function formatDate(dateString) {
-    if (!dateString || dateString === "N/A" || dateString === "Not Attempted" || dateString === "-") return dateString;
+    if (!dateString || dateString === "N/A" || dateString === "Not Attempted") return dateString;
     try {
-        const date = new Date(dateString);
-        if (isNaN(date.getTime())) { // If direct parse fails, try with 'T00:00:00'
-            const dateWithTime = new Date(dateString + 'T00:00:00');
-            if (!isNaN(dateWithTime.getTime())) {
-                dateString = dateWithTime;
-            } else {
-                return dateString; // Return original string if all parsing fails
-            }
-        }
-        const d = new Date(dateString);
-        const day = d.getDate();
-        const month = d.toLocaleString('default', { month: 'short' });
-        const year = d.getFullYear();
+        const date = new Date(dateString + 'T00:00:00'); // Add T00:00:00 to ensure UTC interpretation and avoid timezone issues
+        const day = date.getDate();
+        const month = date.toLocaleString('default', { month: 'short' });
+        const year = date.getFullYear();
         return `${day} ${month}, ${year}`;
     } catch (e) {
         console.error("Error formatting date:", dateString, e);
@@ -283,12 +157,17 @@ function formatDate(dateString) {
     }
 }
 
-// --- Data Fetching ---
+// URLs for the Google Sheet CSV data (Updated based on Phase 1 & 2 sheets)
 const CSV_URLS = {
     aggregatedScores: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSySYBO9YL3N4aUG3JEYZMQQIv9d1oSm3ba4Ty9Gt4SsGs2zmTS_k81rH3Qv41mZvClnayNcDpl_QbI/pub?gid=1890969747&single=true&output=csv', // DashboardFeed_AggregatedScores from Phase 1
     questionDetails: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=822014112&single=true&output=csv' // DashboardFeed_QuestionDetails from Phase 2
 };
 
+/**
+ * Fetches CSV data from a given URL and parses it using PapaParse.
+ * @param {string} url - The URL of the CSV file.
+ * @returns {Promise<Array<Object>>} A promise that resolves with an array of objects representing the CSV data.
+ */
 async function fetchCsvData(url) {
     console.log(`Fetching data from: ${url}`);
     try {
@@ -299,14 +178,16 @@ async function fetchCsvData(url) {
         const csvText = await response.text();
         return new Promise((resolve, reject) => {
             Papa.parse(csvText, {
-                header: true,
-                dynamicTyping: true,
+                header: true, // Treat the first row as headers
+                dynamicTyping: true, // Automatically convert numbers and booleans
                 skipEmptyLines: true,
                 complete: function(results) {
                     if (results.errors.length) {
-                        console.warn(`PapaParse warnings for ${url}:`, results.errors);
+                        console.error(`PapaParse errors for ${url}:`, results.errors);
+                        reject(results.errors);
                     }
                     console.log(`Successfully parsed ${results.data.length} rows from ${url}`);
+                    // Log headers for confirmation
                     if (results.meta && results.meta.fields) {
                         console.log(`Headers for ${url}:`, results.meta.fields);
                     }
@@ -316,374 +197,15 @@ async function fetchCsvData(url) {
         });
     } catch (error) {
         console.error(`Could not fetch or parse CSV from ${url}:`, error);
-        return [];
+        return []; // Return empty array on error to allow the rest of the app to function
     }
 }
-
-// --- Data Transformation ---
-function transformRawData(aggregatedScoresData, questionDetailsData) {
-    console.log("Starting data transformation...");
-
-    // Determine the target student email ID from the filter, or default to the first student
-    const studentEmailFilter = document.getElementById('studentEmailFilter');
-    let targetStudentGmailID = studentEmailFilter ? studentEmailFilter.value : null;
-
-    if (!targetStudentGmailID && aggregatedScoresData.length > 0) {
-        targetStudentGmailID = aggregatedScoresData[0]['StudentGmailID'];
-    } else if (!targetStudentGmailID) {
-        targetStudentGmailID = "default@example.com"; // Fallback if no data at all
-    }
-
-    const studentAggregatedScores = aggregatedScoresData.filter(row => row.StudentGmailID === targetStudentGmailID);
-    const studentQuestionDetails = questionDetailsData.filter(row => row.StudentGmailID === targetStudentGmailID);
-
-    // Get actual student info from the filtered data
-    const actualStudentFullName = studentAggregatedScores.length > 0 ? studentAggregatedScores[0]['StudentFullName'] : "Unknown Student";
-    const actualStudentTargetScore = studentAggregatedScores.length > 0 ? studentAggregatedScores[0]['StudentTargetScore'] : 1400;
-
-    let transformedData = {
-        studentName: actualStudentFullName,
-        targetScore: actualStudentTargetScore,
-        latestScores: { total: 0, rw: 0, math: 0, avgEocKhan: 'N/A', classAvgTotal: 'N/A', classAvgRW: 'N/A', classAvgMath: 'N/A', classAvgEocKhan: 'N/A' },
-        timeSpent: { studentAvg: 0, studentUnit: "min / assessment", classAvg: 0, classUnit: "min / assessment"},
-        scoreTrend: { labels: [], studentScores: [], classAvgScores: [] },
-        overallSkillPerformance: { labels: [], studentAccuracy: [], classAvgAccuracy: [] },
-
-        cbPracticeTests: [],
-        eocQuizzes: { reading: [], writing: [], math: [] },
-        khanAcademy: { reading: [], writing: [], math: [] },
-        skills: { reading: [], writing: [], math: [] },
-        chapters: currentStudentData.chapters // Reference the global constant
-    };
-
-    // --- Process CB Practice Tests from Aggregated Scores ---
-    // Definitive list of official CB Tests for display
-    const allOfficialCBTNames = [ "DG-T0", "CB-T4", "CB-T5", "CB-T6", "CB-T7", "CB-T8", "CB-T9", "CB-T10" ]; 
-    const mainCBTestSource = 'Canvas CB Test';
-
-    const processedCbTests = {}; // To store processed test data
-
-    studentAggregatedScores.forEach(row => {
-        // Filter for main CB Tests with valid scores
-        if (row.AssessmentSource === mainCBTestSource && allOfficialCBTNames.includes(row.AssessmentName)) {
-            // Ensure total score is valid before considering it an attempted test
-            const totalScore = parseFloat(row.ScaledScore_Total);
-            if (!isNaN(totalScore) && totalScore > 0) {
-                if (!processedCbTests[row.AssessmentName]) {
-                    const testQuestions = studentQuestionDetails.filter(q => q.AssessmentName === row.AssessmentName)
-                        .map(qRow => ({
-                            id: `${qRow.AssessmentName}-Q${qRow.QuestionSequenceInQuiz}`,
-                            subject: getSubjectFromSkillTag(qRow.SAT_Skill_Tag),
-                            skill: qRow.SAT_Skill_Tag,
-                            difficulty: qRow.Difficulty,
-                            yourAnswer: String(qRow.StudentAnswer),
-                            correctAnswer: (qRow.IsCorrect === true) ? String(qRow.StudentAnswer) : "Not provided in raw data", // Correct answer text not in this CSV
-                            isCorrect: qRow.IsCorrect,
-                            explanation: "No explanation provided in raw data.",
-                            yourTime: qRow.TimeSpentOnQuestion_Seconds,
-                            classAvgTime: qRow.TimeSpentOnQuestion_Seconds, // Assuming class average time is the same as student's for now or needs another source
-                            classPerformance: {
-                                correct: qRow.ClassAveragePoints_Question !== null && qRow.PointsPossible_Question !== null && qRow.PointsPossible_Question > 0 ?
-                                    Math.round((qRow.ClassAveragePoints_Question / qRow.PointsPossible_Question) * 100) : 0,
-                                incorrect: 0, unanswered: 0 // Not available in this CSV
-                            },
-                            source: row.AssessmentSource,
-                            text: qRow.QuestionText_fromMetadata
-                        }));
-
-                    processedCbTests[row.AssessmentName] = {
-                        name: row.AssessmentName,
-                        displayName: ASSESSMENT_NAME_MAP[row.AssessmentName] || row.AssessmentName,
-                        date: row.AttemptDate,
-                        rw: row.ScaledScore_RW,
-                        math: row.ScaledScore_Math,
-                        total: row.ScaledScore_Total,
-                        classAvgTotal: row.ClassAverageScore_Normalized,
-                        classAvgRW: 'N/A', // Not available in headers
-                        classAvgMath: 'N/A', // Not available in headers
-                        questions: testQuestions
-                    };
-                }
-            }
-        }
-    });
-
-    // Populate transformedData.cbPracticeTests with all official tests, marking unattempted ones
-    allOfficialCBTNames.forEach(testName => {
-        if (processedCbTests[testName]) {
-            transformedData.cbPracticeTests.push(processedCbTests[testName]);
-        } else {
-            transformedData.cbPracticeTests.push({
-                name: testName,
-                displayName: ASSESSMENT_NAME_MAP[testName] || testName,
-                date: "Not Attempted",
-                rw: "-", math: "-", total: "-",
-                classAvgTotal: '-', classAvgRW: '-', classAvgMath: '-',
-                questions: []
-            });
-        }
-    });
-
-    // Sort CB Tests (attempted first, then by date)
-    transformedData.cbPracticeTests.sort((a, b) => {
-        const dateA = a.date !== "Not Attempted" ? new Date(a.date) : null;
-        const dateB = b.date !== "Not Attempted" ? new Date(b.date) : null;
-
-        if (dateA && dateB) return dateA - dateB;
-        if (dateA) return -1;
-        if (dateB) return 1;
-        return a.displayName.localeCompare(b.displayName); // Sort by display name if both unattempted
-    });
-
-    // --- Populate Score Trend ---
-    const attemptedCbTestsForTrend = transformedData.cbPracticeTests.filter(t => t.date !== "Not Attempted" && t.total !== null && t.total !== "-");
-
-    transformedData.scoreTrend.labels = attemptedCbTestsForTrend.map(t => formatDate(t.date) + ` (${t.displayName})`);
-    transformedData.scoreTrend.studentScores = attemptedCbTestsForTrend.map(t => t.total);
-    transformedData.scoreTrend.classAvgScores = attemptedCbTestsForTrend.map(t => t.classAvgTotal);
-
-    // --- Calculate Latest Scores (for KPI cards) ---
-    const latestTest = attemptedCbTestsForTrend.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-    if (latestTest) {
-        transformedData.latestScores.total = latestTest.total;
-        transformedData.latestScores.rw = latestTest.rw;
-        transformedData.latestScores.math = latestTest.math;
-        transformedData.latestScores.classAvgTotal = latestTest.classAvgTotal;
-        transformedData.latestScores.classAvgRW = latestTest.classAvgRW;
-        transformedData.latestScores.classAvgMath = latestTest.classAvgMath;
-    }
-
-    // --- Process EOC Quizzes and Khan Academy ---
-    const assessmentsBySourceAndName = {}; // Temp structure: {source: {name: [qRow, qRow, ...]}}
-    studentQuestionDetails.forEach(qRow => {
-        const source = qRow.AssessmentSource;
-        const name = qRow.AssessmentName;
-        if (!assessmentsBySourceAndName[source]) assessmentsBySourceAndName[source] = {};
-        if (!assessmentsBySourceAndName[source][name]) assessmentsBySourceAndName[source][name] = [];
-        assessmentsBySourceAndName[source][name].push(qRow);
-    });
-
-    const subjects = ['reading', 'writing', 'math'];
-
-    // EOC Quizzes
-    subjects.forEach(subject => {
-        // Collect all possible EOC assessment names for this subject from the map
-        const subjectEOCNames = Object.keys(ASSESSMENT_NAME_MAP).filter(key => key.startsWith(`${subject.toUpperCase().charAt(0)}-EOC`));
-
-        subjectEOCNames.forEach(rawName => {
-            const questionsForAssessment = assessmentsBySourceAndName['Canvas EOC Practice']?.[rawName];
-            const matchingAggregatedScore = studentAggregatedScores.find(s => s.AssessmentSource === 'Canvas EOC Practice' && s.AssessmentName === rawName);
-
-            const quizEntry = {
-                name: ASSESSMENT_NAME_MAP[rawName] || rawName,
-                rawName: rawName,
-                date: matchingAggregatedScore ? matchingAggregatedScore.AttemptDate : "Not Attempted",
-                latestScore: matchingAggregatedScore ? `${matchingAggregatedScore.Score_Percentage}%${matchingAggregatedScore.Score_Raw_Combined !== null ? ` (${matchingAggregatedScore.Score_Raw_Combined}/${matchingAggregatedScore.PointsPossible_Combined})` : ''}` : "N/A",
-                classAvgScore: matchingAggregatedScore ? `${matchingAggregatedScore.ClassAverageScore_Normalized}%` : "N/A",
-                questions: []
-            };
-
-            if (questionsForAssessment) {
-                 quizEntry.questions = questionsForAssessment.map(qRow => ({
-                    id: `${rawName}-Q${qRow.QuestionSequenceInQuiz}`,
-                    subject: getSubjectFromSkillTag(qRow.SAT_Skill_Tag),
-                    skill: qRow.SAT_Skill_Tag,
-                    difficulty: qRow.Difficulty,
-                    yourAnswer: String(qRow.StudentAnswer),
-                    correctAnswer: (qRow.IsCorrect === true) ? String(qRow.StudentAnswer) : "Not provided in raw data",
-                    isCorrect: qRow.IsCorrect,
-                    explanation: "No explanation provided in raw data.",
-                    yourTime: qRow.TimeSpentOnQuestion_Seconds,
-                    classAvgTime: qRow.TimeSpentOnQuestion_Seconds, // Assuming this is class average time for question
-                    classPerformance: {
-                        correct: qRow.ClassAveragePoints_Question !== null && qRow.PointsPossible_Question !== null && qRow.PointsPossible_Question > 0 ?
-                            Math.round((qRow.ClassAveragePoints_Question / qRow.PointsPossible_Question) * 100) : 0,
-                        incorrect: 0, unanswered: 0
-                    },
-                    source: 'Canvas EOC Practice',
-                    text: qRow.QuestionText_fromMetadata
-                }));
-            }
-            transformedData.eocQuizzes[subject].push(quizEntry);
-        });
-        transformedData.eocQuizzes[subject].sort((a,b) => a.name.localeCompare(b.name));
-    });
-
-    // Khan Academy
-    subjects.forEach(subject => {
-        // Collect all possible Khan assessment names for this subject from the map
-        const subjectKhanNames = Object.keys(ASSESSMENT_NAME_MAP).filter(key => key.startsWith('Khan Academy:') && getSubjectFromAssessmentName(key) === subject);
-
-        subjectKhanNames.forEach(rawName => {
-            const questionsForAssessment = assessmentsBySourceAndName['Khan Academy Practice']?.[rawName];
-            const matchingAggregatedScore = studentAggregatedScores.find(s => s.AssessmentSource === 'Khan Academy Practice' && s.AssessmentName === rawName);
-
-            const khanEntry = {
-                name: ASSESSMENT_NAME_MAP[rawName] || rawName,
-                rawName: rawName,
-                date: matchingAggregatedScore ? matchingAggregatedScore.AttemptDate : "Not Attempted",
-                latestScore: matchingAggregatedScore ? `${matchingAggregatedScore.Score_Percentage}%${matchingAggregatedScore.Score_Raw_Combined !== null ? ` (${matchingAggregatedScore.Score_Raw_Combined}/${matchingAggregatedScore.PointsPossible_Combined})` : ''}` : "N/A",
-                classAvgScore: matchingAggregatedScore ? `${matchingAggregatedScore.ClassAverageScore_Normalized}%` : "N/A",
-                questions: []
-            };
-
-            if (questionsForAssessment) {
-                 khanEntry.questions = questionsForAssessment.map(qRow => ({
-                    id: `${rawName}-Q${qRow.QuestionSequenceInQuiz}`,
-                    subject: getSubjectFromSkillTag(qRow.SAT_Skill_Tag),
-                    skill: qRow.SAT_Skill_Tag,
-                    difficulty: qRow.Difficulty,
-                    yourAnswer: String(qRow.StudentAnswer),
-                    correctAnswer: (qRow.IsCorrect === true) ? String(qRow.StudentAnswer) : "Not provided in raw data",
-                    isCorrect: qRow.IsCorrect,
-                    explanation: "No explanation provided in raw data.",
-                    yourTime: qRow.TimeSpentOnQuestion_Seconds,
-                    classAvgTime: qRow.TimeSpentOnQuestion_Seconds, // Assuming this is class average time for question
-                    classPerformance: {
-                        correct: qRow.ClassAveragePoints_Question !== null && qRow.PointsPossible_Question !== null && qRow.PointsPossible_Question > 0 ?
-                            Math.round((qRow.ClassAveragePoints_Question / qRow.PointsPossible_Question) * 100) : 0,
-                        incorrect: 0, unanswered: 0
-                    },
-                    source: 'Khan Academy Practice',
-                    text: qRow.QuestionText_fromMetadata
-                }));
-            }
-            transformedData.khanAcademy[subject].push(khanEntry);
-        });
-        transformedData.khanAcademy[subject].sort((a,b) => a.name.localeCompare(b.name));
-    });
-
-
-    // --- Calculate Avg EOC/Khan Score for KPI ---
-    const allAttemptedEocKhanAssessments = [
-        ...Object.values(transformedData.eocQuizzes).flat(),
-        ...Object.values(transformedData.khanAcademy).flat()
-    ].filter(a => a.latestScore !== "N/A" && a.latestScore !== "-");
-
-    const studentEocKhanPercentages = allAttemptedEocKhanAssessments
-        .map(a => parseFloat(String(a.latestScore).match(/(\d+)%/)?.[1]))
-        .filter(score => !isNaN(score) && score > 0);
-
-    const classEocKhanPercentages = allAttemptedEocKhanAssessments
-        .map(a => parseFloat(String(a.classAvgScore).match(/(\d+)%/)?.[1]))
-        .filter(score => !isNaN(score) && score > 0);
-
-    if (studentEocKhanPercentages.length > 0) {
-        transformedData.latestScores.avgEocKhan = Math.round(studentEocKhanPercentages.reduce((sum, score) => sum + score, 0) / studentEocKhanPercentages.length);
-    } else {
-        transformedData.latestScores.avgEocKhan = 'N/A';
-    }
-
-    if (classEocKhanPercentages.length > 0) {
-        transformedData.latestScores.classAvgEocKhan = Math.round(classEocKhanPercentages.reduce((sum, score) => sum + score, 0) / classEocKhanPercentages.length);
-    } else {
-        transformedData.latestScores.classAvgEocKhan = 'N/A';
-    }
-
-
-    // --- Calculate Skill Performance ---
-    const skillAggregations = {}; // skillName: { studentCorrect, studentTotal, classSumPoints, classTotalPossiblePoints }
-
-    studentQuestionDetails.forEach(qRow => {
-        const skill = qRow.SAT_Skill_Tag;
-        if (!skill || String(skill).includes('TBD_No_Correlation_Or_CustomQID')) return;
-
-        if (!skillAggregations[skill]) {
-            skillAggregations[skill] = { studentCorrect: 0, studentTotal: 0, classSumPoints: 0, classTotalPossible: 0 };
-        }
-        skillAggregations[skill].studentTotal++;
-        if (qRow.IsCorrect === true) {
-            skillAggregations[skill].studentCorrect++;
-        }
-        if (qRow.ClassAveragePoints_Question !== null && qRow.PointsPossible_Question !== null && qRow.PointsPossible_Question > 0) {
-            skillAggregations[skill].classSumPoints += qRow.ClassAveragePoints_Question;
-            skillAggregations[skill].classTotalPossible += qRow.PointsPossible_Question;
-        }
-    });
-
-    // Populate transformedData.skills with all possible skills from mapping, even if unattempted
-    const allPossibleSkillsFromMapping = new Set();
-    Object.values(SAT_CHAPTER_SKILL_MAPPING).forEach(subjectSkills => {
-        Object.keys(subjectSkills).forEach(skillKey => {
-            allPossibleSkillsFromMapping.add(skillKey);
-        });
-    });
-
-    subjects.forEach(subject => {
-        transformedData.skills[subject] = [];
-        allPossibleSkillsFromMapping.forEach(skillName => {
-            // Check if this skill name is associated with the current subject in the mapping
-            const isRelevantSkillForSubject = Object.keys(SAT_CHAPTER_SKILL_MAPPING[subject]).some(mappedSkill => 
-                skillName.toLowerCase().includes(mappedSkill.toLowerCase()) || mappedSkill.toLowerCase().includes(skillName.toLowerCase())
-            );
-
-            if (isRelevantSkillForSubject) {
-                const skillData = skillAggregations[skillName];
-                const studentScore = skillData ? (skillData.studentTotal > 0 ? Math.round((skillData.studentCorrect / skillData.studentTotal) * 100) : 0) : 0;
-                const classAvgScore = skillData ? (skillData.classTotalPossible > 0 ? Math.round((skillData.classSumPoints / skillData.classTotalPossible) * 100) : 0) : 0;
-                const attempted = skillData ? skillData.studentTotal > 0 : false;
-
-                transformedData.skills[subject].push({
-                    name: skillName,
-                    score: studentScore,
-                    classAvg: classAvgScore,
-                    attempted: attempted
-                });
-            }
-        });
-        transformedData.skills[subject].sort((a,b) => a.name.localeCompare(b.name)); // Sort skills alphabetically
-    });
-
-    // --- Calculate OverallSkillPerformance for Overview Chart ---
-    transformedData.overallSkillPerformance.labels = [];
-    transformedData.overallSkillPerformance.studentAccuracy = [];
-    transformedData.overallSkillPerformance.classAvgAccuracy = [];
-
-    subjects.forEach(subject => {
-        const subjectSkills = transformedData.skills[subject];
-        if (subjectSkills.length > 0) {
-            // Only average skills that have been attempted by the student for student accuracy
-            const attemptedStudentSkills = subjectSkills.filter(s => s.attempted);
-            const totalStudentAccuracy = attemptedStudentSkills.length > 0 ? attemptedStudentSkills.reduce((sum, s) => sum + s.score, 0) / attemptedStudentSkills.length : 0;
-            
-            // Average all skills for class average (assuming class average is always available for all skills, or default to 0)
-            const totalClassAccuracy = subjectSkills.length > 0 ? subjectSkills.reduce((sum, s) => sum + s.classAvg, 0) / subjectSkills.length : 0;
-
-            transformedData.overallSkillPerformance.labels.push(subject.charAt(0).toUpperCase() + subject.slice(1));
-            transformedData.overallSkillPerformance.studentAccuracy.push(Math.round(totalStudentAccuracy));
-            transformedData.overallSkillPerformance.classAvgAccuracy.push(Math.round(totalClassAccuracy));
-        }
-    });
-    
-    // --- Calculate Time Spent for KPI ---
-    transformedData.timeSpent.studentAvg = Math.round(studentAggregatedScores.reduce((sum, row) => sum + (row.TimeSpent_Seconds || 0), 0) / (studentAggregatedScores.length || 1) / 60);
-    transformedData.timeSpent.classAvg = Math.round(aggregatedScoresData.reduce((sum, row) => sum + (row.ClassAverageTime_Seconds || 0), 0) / (aggregatedScoresData.length || 1) / 60);
-    transformedData.timeSpent.studentUnit = "min / assessment";
-    transformedData.timeSpent.classUnit = "min / assessment";
-
-
-    console.log("Transformed Data:", transformedData);
-    return transformedData;
-}
-
-// --- DOM Content Loaded & Event Listeners ---
-document.addEventListener('DOMContentLoaded', function () {
-    // Chart.js Global Configuration
-    Chart.defaults.font.family = 'Inter';
-    Chart.defaults.plugins.legend.position = 'bottom';
-    Chart.defaults.responsive = true;
-    Chart.defaults.maintainAspectRatio = false;
-
-    // Initial data loading and display (this will also populate the email filter)
-    loadAndDisplayData(true); // Pass 'true' to indicate initial load to populate filter
-    setupEventListeners(); // Set up event listeners for tabs etc.
-});
 
 /**
- * Main function to load and display all dashboard data.
- * @param {boolean} isInitialLoad - True if this is the first load (to populate email filter).
+ * Orchestrates the fetching and processing of all data sources.
+ * This is the main function to call when refreshing or initially loading data.
  */
-async function loadAndDisplayData(isInitialLoad = false) {
+async function loadAndDisplayData() {
     console.log("Loading and displaying data...");
     document.getElementById('studentNameDisplay').textContent = "Loading data...";
 
@@ -691,56 +213,50 @@ async function loadAndDisplayData(isInitialLoad = false) {
         const aggregatedScoresData = await fetchCsvData(CSV_URLS.aggregatedScores);
         const questionDetailsData = await fetchCsvData(CSV_URLS.questionDetails);
 
-        // Populate the email filter on initial load
-        if (isInitialLoad && aggregatedScoresData.length > 0) {
-            allStudentEmails = [...new Set(aggregatedScoresData.map(row => row.StudentGmailID))].sort();
-            populateEmailFilter(allStudentEmails);
-        }
+        // --- Data Transformation Goes Here ---
+        // For now, we'll just log and use a placeholder to show data fetching works.
+        // The detailed transformation logic will be built in the next steps.
 
+        // Placeholder for the transformed data
         const transformedData = transformRawData(aggregatedScoresData, questionDetailsData);
         currentStudentData = transformedData; // Update global data object
 
         // Populate ALL_DASHBOARD_QUESTIONS from the newly fetched data
-        // Filter out questions where subject is 'unknown' or skill is 'TBD...' or 'No Correlation'
+        // FIX: Removed 'let' here to prevent SyntaxError: 'ALL_DASHBOARD_QUESTIONS' has already been declared
         ALL_DASHBOARD_QUESTIONS = [
             ...(currentStudentData.cbPracticeTests.flatMap(t => t.questions || [])),
-            ...(Object.values(currentStudentData.eocQuizzes).flat().flatMap(q => q.questions || [])),
-            ...(Object.values(currentStudentData.khanAcademy).flat().flatMap(q => q.questions || []))
-        ].filter(q => q.subject !== 'unknown' && q.skill && !String(q.skill).includes('TBD_No_Correlation_Or_CustomQID'));
-
-        console.log("ALL_DASHBOARD_QUESTIONS populated with:", ALL_DASHBOARD_QUESTIONS.length, "relevant questions.");
+            ...(Object.values(currentStudentData.eocQuizzes).flat().flatMap(q => q.questions || []))
+        ];
+        console.log("ALL_DASHBOARD_QUESTIONS populated with:", ALL_DASHBOARD_QUESTIONS.length, "questions from fetched data.");
 
 
         // Update student name display
         document.getElementById('studentNameDisplay').textContent = `Welcome! ${currentStudentData.studentName}`;
-        
+
         // Re-render dashboard sections with the new data
         populateOverview(currentStudentData);
         populatePracticeTestsTable(currentStudentData.cbPracticeTests);
 
-        // Iterate through subjects to populate their specific sections
-        const subjects = ['reading', 'writing', 'math'];
-        subjects.forEach(subject => {
+        ['reading', 'writing', 'math'].forEach(subject => {
             populateEOCPractice(subject, currentStudentData.eocQuizzes[subject] || []);
             populateKhanAcademy(subject, currentStudentData.khanAcademy[subject] || []);
-            
-            // Populate Skills Hub only if it's the active tab, otherwise it will be populated on tab switch
-            const skillsHubTabButton = document.querySelector(`.sub-tab-button[data-sub-tab="${subject}-skills-hub"]`);
-            if (skillsHubTabButton && skillsHubTabButton.classList.contains('active')) {
-                populateSkillsHub(subject, currentStudentData.skills[subject] || []);
-            }
         });
 
-        // Manually trigger click on the initial active tab (Overview) to ensure charts load
-        // This needs to be done AFTER all event listeners are set up.
-        const activeMainTabButton = document.querySelector('.main-tab-button.active');
-        if (activeMainTabButton) {
-            activeMainTabButton.click();
-        } else {
-            // Fallback: if no tab is active, activate Overview
-            document.querySelector('.main-tab-button[data-main-tab="overview"]')?.click();
+        // Ensure the active tab's content is re-rendered properly
+        const activeMainTab = document.querySelector('.main-tab-button.active');
+        if (activeMainTab) {
+            const targetTabName = activeMainTab.getAttribute('data-main-tab');
+            if (targetTabName === 'overview') {
+                initializeOverviewCharts(currentStudentData);
+            } else if (['reading', 'writing', 'math'].includes(targetTabName)) {
+                const firstSubTabButton = document.querySelector(`#${targetTabName}-content .sub-tab-button.active`);
+                if (firstSubTabButton) {
+                    // Re-trigger sub-tab content display, especially for Skills Hub
+                    const subject = targetTabName;
+                    populateSkillsHub(subject, currentStudentData.skills[subject] || []);
+                }
+            }
         }
-
         console.log("Dashboard data loaded and displayed successfully.");
 
     } catch (error) {
@@ -751,48 +267,317 @@ async function loadAndDisplayData(isInitialLoad = false) {
 }
 
 /**
- * Populates the student email filter dropdown.
- * @param {Array<string>} emails - Array of unique student email IDs.
+ * Transforms raw CSV data into the structured currentStudentData object.
+ * This is the core data processing logic.
+ * @param {Array<Object>} aggregatedScoresData - Data from DashboardFeed_AggregatedScores.
+ * @param {Array<Object>} questionDetailsData - Data from DashboardFeed_QuestionDetails.
+ * @returns {Object} The transformed currentStudentData object.
  */
-function populateEmailFilter(emails) {
-    const filterSelect = document.getElementById('studentEmailFilter');
-    if (!filterSelect) return;
+function transformRawData(aggregatedScoresData, questionDetailsData) {
+    console.log("Starting data transformation...");
 
-    filterSelect.innerHTML = ''; // Clear existing options
-    if (emails.length === 0) {
-        filterSelect.innerHTML = '<option value="">No Students Found</option>';
-        filterSelect.disabled = true;
-        return;
-    }
+    // Determine the student to display. For now, let's take the first unique student found.
+    // In a real app, this would be a user selection or login-based.
+    const uniqueStudentGmailIDs = [...new Set(aggregatedScoresData.map(row => row.StudentGmailID))];
+    const targetStudentGmailID = uniqueStudentGmailIDs[0] || "default@example.com"; // Fallback
+    console.log("Targeting data for student:", targetStudentGmailID);
 
-    // Add a default "Select a student" option
-    const defaultOption = document.createElement('option');
-    defaultOption.value = "";
-    defaultOption.textContent = "Select a student...";
-    filterSelect.appendChild(defaultOption);
+    // Filter data for the target student
+    const studentAggregatedScores = aggregatedScoresData.filter(row => row.StudentGmailID === targetStudentGmailID);
+    const studentQuestionDetails = questionDetailsData.filter(row => row.StudentGmailID === targetStudentGmailID);
 
-    emails.forEach(email => {
-        const option = document.createElement('option');
-        option.value = email;
-        option.textContent = email;
-        filterSelect.appendChild(option);
+    let transformedData = {
+        studentName: studentAggregatedScores.length > 0 ? studentAggregatedScores[0]['StudentFullName'] : "Unknown Student",
+        targetScore: studentAggregatedScores.length > 0 ? studentAggregatedScores[0]['StudentTargetScore'] : 1400,
+        latestScores: { total: 0, rw: 0, math: 0, avgEocKhan: 0 }, // Will be calculated
+        timeSpent: { studentAvg: 0, studentUnit: "min / day", classAvg: 0, classUnit: "min / day"}, // Will be calculated/derived
+        scoreTrend: { labels: [], studentScores: [], classAvgScores: [] }, // Will be populated from CB Tests
+        overallSkillPerformance: { labels: [], studentAccuracy: [], classAvgAccuracy: [] }, // Will be populated from question details
+
+        cbPracticeTests: [],
+        eocQuizzes: {
+            reading: [],
+            writing: [],
+            math: []
+        },
+        khanAcademy: {
+            reading: [],
+            writing: [],
+            math: []
+        },
+        skills: {
+            reading: [],
+            writing: [],
+            math: []
+        },
+        chapters: currentStudentData.chapters // Retain static chapters mapping
+    };
+
+    // --- Process CB Practice Tests from Aggregated Scores ---
+    const cbTests = studentAggregatedScores.filter(row => row.AssessmentSource === 'Canvas CB Test' && row.AssessmentName.startsWith('CB-T') || row.AssessmentName.startsWith('DG-T0'));
+    // Sort CB Tests by attempt date if available, or by name
+    cbTests.sort((a, b) => {
+        if (a.AttemptDate && b.AttemptDate) return new Date(a.AttemptDate) - new Date(b.AttemptDate);
+        return a.AssessmentName.localeCompare(b.AssessmentName);
     });
 
-    filterSelect.disabled = false;
+    // Keep track of which official tests have been attempted
+    const allOfficialCBTNames = [ // Ensure all 8 CB Tests are represented, even if not attempted
+        "DG-T0", "CB-T1", "CB-T2", "CB-T3", "CB-T4", "CB-T5", "CB-T6", "CB-T7", "CB-T8", "CB-T9", "CB-T10"
+        // Add more as per your full list of official tests if different
+    ];
 
-    // Add event listener for when a new student is selected
-    filterSelect.addEventListener('change', () => {
-        loadAndDisplayData(); // Reload data for the newly selected student
+    allOfficialCBTNames.forEach(testName => {
+        const foundTest = cbTests.find(t => t.AssessmentName === testName);
+        if (foundTest) {
+            // Find all questions related to this test from questionDetailsData
+            const testQuestions = studentQuestionDetails.filter(q =>
+                q.AssessmentName === foundTest.AssessmentName
+            ).map(qRow => ({
+                id: `${qRow.AssessmentName}-Q${qRow.QuestionSequenceInQuiz}`,
+                subject: qRow.SAT_Skill_Tag && (qRow.SAT_Skill_Tag.includes("Math") ? "math" : qRow.SAT_Skill_Tag.includes("Reading") ? "reading" : qRow.SAT_Skill_Tag.includes("Writing") ? "writing" : "unknown"), // Derive subject
+                skill: qRow.SAT_Skill_Tag,
+                difficulty: qRow.Difficulty,
+                yourAnswer: qRow.StudentAnswer,
+                correctAnswer: qRow.IsCorrect === true ? qRow.StudentAnswer : "N/A (check raw data for actual correct answer)", // Placeholder, need actual correct answer
+                isCorrect: qRow.IsCorrect,
+                explanation: "Explanation will go here if available from another source", // Placeholder for explanations
+                yourTime: qRow.TimeSpentOnQuestion_Seconds,
+                classAvgTime: qRow.ClassAveragePoints_Question, // Assuming this is actually class average time, rename later
+                classPerformance: {
+                    correct: qRow.ClassAveragePoints_Question !== null ? Math.round((qRow.ClassAveragePoints_Question / qRow.PointsPossible_Question) * 100) : 0, // Placeholder calculation, need actual class performance %
+                    incorrect: 0, // Placeholder
+                    unanswered: 0 // Placeholder
+                },
+                source: foundTest.AssessmentSource,
+                text: qRow.QuestionText_fromMetadata
+            }));
+
+            // Calculate score for the test based on individual question correctness if needed
+            // For now, use aggregated scores
+            transformedData.cbPracticeTests.push({
+                name: foundTest.AssessmentName,
+                date: foundTest.AttemptDate,
+                rw: foundTest.ScaledScore_RW || "-",
+                math: foundTest.ScaledScore_Math || "-",
+                total: foundTest.ScaledScore_Total || "-",
+                questions: testQuestions
+            });
+        } else {
+            // Add as "Not Attempted"
+            transformedData.cbPracticeTests.push({
+                name: testName,
+                date: "Not Attempted",
+                rw: "-",
+                math: "-",
+                total: "-",
+                questions: []
+            });
+        }
     });
 
-    // Set the filter to the default student if one exists
-    if (emails.includes('aisha.malik@example.pk')) { // Set default to Aisha if she's in the list
-        filterSelect.value = 'aisha.malik@example.pk';
-    } else if (emails.length > 0) {
-        filterSelect.value = emails[0]; // Otherwise, select the first student
+    // --- Populate Score Trend (from CB Tests) ---
+    transformedData.scoreTrend.labels = transformedData.cbPracticeTests
+        .filter(t => t.date !== "Not Attempted" && t.total !== "-")
+        .map(t => t.name);
+    transformedData.scoreTrend.studentScores = transformedData.cbPracticeTests
+        .filter(t => t.date !== "Not Attempted" && t.total !== "-")
+        .map(t => t.total);
+    transformedData.scoreTrend.classAvgScores = transformedData.cbPracticeTests
+        .filter(t => t.date !== "Not Attempted" && t.total !== "-")
+        .map(t => {
+            const correspondingAggregatedRow = studentAggregatedScores.find(s => s.AssessmentName === t.name);
+            return correspondingAggregatedRow ? correspondingAggregatedRow.ClassAverageScore_Normalized : null; // Use normalized class average
+        });
+
+
+    // --- Calculate Overall Scores and Latest Scores ---
+    const latestTest = transformedData.cbPracticeTests.filter(t => t.date !== "Not Attempted" && t.total !== "-").sort((a,b) => new Date(b.date) - new Date(a.date))[0];
+    if (latestTest) {
+        transformedData.latestScores.total = latestTest.total;
+        transformedData.latestScores.rw = latestTest.rw;
+        transformedData.latestScores.math = latestTest.math;
     }
+
+    // --- Process EOC Quizzes and Khan Academy (Initial Structure) ---
+    // Group question details by AssessmentSource and AssessmentName
+    const quizzesByAssessment = {};
+    studentQuestionDetails.forEach(qRow => {
+        const assessmentName = qRow.AssessmentName;
+        const assessmentSource = qRow.AssessmentSource;
+        if (!quizzesByAssessment[assessmentSource]) {
+            quizzesByAssessment[assessmentSource] = {};
+        }
+        if (!quizzesByAssessment[assessmentSource][assessmentName]) {
+            quizzesByAssessment[assessmentSource][assessmentName] = [];
+        }
+        quizzesByAssessment[assessmentSource][assessmentName].push(qRow);
+    });
+
+    for (const source in quizzesByAssessment) {
+        for (const name in quizzesByAssessment[source]) {
+            const questions = quizzesByAssessment[source][name].map(qRow => ({
+                id: `${name}-Q${qRow.QuestionSequenceInQuiz}`,
+                subject: qRow.SAT_Skill_Tag && (qRow.SAT_Skill_Tag.includes("Math") ? "math" : qRow.SAT_Skill_Tag.includes("Reading") ? "reading" : qRow.SAT_Skill_Tag.includes("Writing") ? "writing" : "unknown"), // Derive subject
+                skill: qRow.SAT_Skill_Tag,
+                difficulty: qRow.Difficulty,
+                yourAnswer: qRow.StudentAnswer,
+                correctAnswer: qRow.IsCorrect === true ? qRow.StudentAnswer : "N/A", // Need actual correct answer if not provided
+                isCorrect: qRow.IsCorrect,
+                explanation: "Explanation will go here if available",
+                yourTime: qRow.TimeSpentOnQuestion_Seconds,
+                classAvgTime: qRow.ClassAveragePoints_Question, // Assuming this is class average time, rename later
+                classPerformance: {
+                    correct: qRow.ClassAveragePoints_Question !== null ? Math.round((qRow.ClassAveragePoints_Question / qRow.PointsPossible_Question) * 100) : 0,
+                    incorrect: 0,
+                    unanswered: 0
+                },
+                source: source,
+                text: qRow.QuestionText_fromMetadata
+            }));
+
+            // Calculate quiz score and find attempt date if possible from aggregated scores
+            const matchingAggregatedScore = studentAggregatedScores.find(s => s.AssessmentName === name);
+            const latestScorePercentage = matchingAggregatedScore ? matchingAggregatedScore.Score_Percentage : null;
+            const latestScoreRaw = matchingAggregatedScore ? `${matchingAggregatedScore.Score_Raw_Combined}/${matchingAggregatedScore.PointsPossible_Combined}` : null;
+            const attemptDate = matchingAggregatedScore ? matchingAggregatedScore.AttemptDate : "N/A";
+
+            const quizEntry = {
+                name: name,
+                date: attemptDate,
+                latestScore: latestScorePercentage !== null ? `${latestScorePercentage}% (${latestScoreRaw})` : "N/A",
+                questions: questions
+            };
+
+            if (source === 'Canvas EOC Practice') {
+                const subjectCategory = quizEntry.name.toLowerCase().includes('r-eoc') ? 'reading' :
+                                         quizEntry.name.toLowerCase().includes('w-eoc') ? 'writing' :
+                                         quizEntry.name.toLowerCase().includes('m-eoc') ? 'math' : 'unknown';
+                if (transformedData.eocQuizzes[subjectCategory]) {
+                    transformedData.eocQuizzes[subjectCategory].push(quizEntry);
+                }
+            } else if (source === 'Khan Academy Practice') {
+                // For Khan Academy, we might need to categorize by subject.
+                // Assuming "Khan: Reading", "Khan: Writing", "Khan: Math" in AssessmentName or SkillTag
+                const khanSubject = quizEntry.name.toLowerCase().includes('reading') ? 'reading' :
+                                     quizEntry.name.toLowerCase().includes('writing') || quizEntry.name.toLowerCase().includes('grammar') ? 'writing' :
+                                     quizEntry.name.toLowerCase().includes('math') || quizEntry.name.toLowerCase().includes('algebra') || quizEntry.name.toLowerCase().includes('geometry') ? 'math' : 'unknown';
+                if (transformedData.khanAcademy[khanSubject]) {
+                    transformedData.khanAcademy[khanSubject].push(quizEntry);
+                }
+            }
+        }
+    }
+
+
+    // --- Calculate Skill Performance (from all questions) ---
+    const allStudentQuestions = studentQuestionDetails; // Use all raw questions for skill aggregation
+    const skillScores = {}; // skillName: { correctCount, totalCount }
+
+    allStudentQuestions.forEach(q => {
+        const skill = q.SAT_Skill_Tag;
+        if (!skill) return;
+
+        if (!skillScores[skill]) {
+            skillScores[skill] = { correctCount: 0, totalCount: 0, classAvg: 0, classSumPoints: 0, classTotalPossible: 0 };
+        }
+        skillScores[skill].totalCount++;
+        if (q.IsCorrect === true) {
+            skillScores[skill].correctCount++;
+        }
+        // For class average: sum up class average points and total possible points
+        if (q.ClassAveragePoints_Question !== null && q.PointsPossible_Question !== null) {
+            skillScores[skill].classSumPoints += q.ClassAveragePoints_Question;
+            skillScores[skill].classTotalPossible += q.PointsPossible_Question;
+        }
+    });
+
+    const subjects = ['reading', 'writing', 'math'];
+    subjects.forEach(subject => {
+        transformedData.skills[subject] = [];
+    });
+
+    for (const skillName in skillScores) {
+        const scoreData = skillScores[skillName];
+        const studentScore = scoreData.totalCount > 0 ? Math.round((scoreData.correctCount / scoreData.totalCount) * 100) : 0;
+        const classAvgScore = scoreData.classTotalPossible > 0 ? Math.round((scoreData.classSumPoints / scoreData.classTotalPossible) * 100) : 0;
+
+        let subjectCategory = 'unknown';
+        if (skillName.includes('Reading')) subjectCategory = 'reading';
+        else if (skillName.includes('Writing') || skillName.includes('Grammar') || skillName.includes('Punctuation')) subjectCategory = 'writing';
+        else if (skillName.includes('Math') || skillName.includes('Algebra') || skillName.includes('Geometry')) subjectCategory = 'math';
+
+        if (transformedData.skills[subjectCategory]) {
+            transformedData.skills[subjectCategory].push({
+                name: skillName,
+                score: studentScore,
+                classAvg: classAvgScore,
+                attempted: scoreData.totalCount > 0
+            });
+        }
+    }
+
+    // --- Calculate OverallSkillPerformance (for overview chart) ---
+    subjects.forEach(subject => {
+        const subjectSkills = transformedData.skills[subject];
+        if (subjectSkills.length > 0) {
+            const totalStudentAccuracy = subjectSkills.reduce((sum, s) => sum + s.score, 0);
+            const totalClassAccuracy = subjectSkills.reduce((sum, s) => sum + s.classAvg, 0);
+            transformedData.overallSkillPerformance.labels.push(subject.charAt(0).toUpperCase() + subject.slice(1));
+            transformedData.overallSkillPerformance.studentAccuracy.push(Math.round(totalStudentAccuracy / subjectSkills.length));
+            transformedData.overallSkillPerformance.classAvgAccuracy.push(Math.round(totalClassAccuracy / subjectSkills.length));
+        }
+    });
+
+    // --- Calculate Time Spent (Placeholder - needs specific data for this) ---
+    // The current CSVs have TimeSpent_Seconds for assessments and TimeSpentOnQuestion_Seconds for questions.
+    // For overall time spent, you'd need a separate aggregation. For now, using placeholders.
+    transformedData.timeSpent.studentAvg = Math.round(studentAggregatedScores.reduce((sum, row) => sum + (row.TimeSpent_Seconds || 0), 0) / (studentAggregatedScores.length || 1) / 60); // minutes per assessment
+    transformedData.timeSpent.classAvg = Math.round(aggregatedScoresData.reduce((sum, row) => sum + (row.ClassAverageTime_Seconds || 0), 0) / (aggregatedScoresData.length || 1) / 60); // minutes per assessment
+    transformedData.timeSpent.studentUnit = "min / assessment";
+    transformedData.timeSpent.classUnit = "min / assessment";
+
+    // --- Calculate Avg EOC/Khan Score ---
+    const allEocKhanScores = Object.values(transformedData.eocQuizzes).flat().map(q => {
+        const percentageMatch = q.latestScore.match(/(\d+)%/);
+        return percentageMatch ? parseInt(percentageMatch[1]) : 0;
+    }).filter(score => score > 0);
+
+    const allKhanScores = Object.values(transformedData.khanAcademy).flat().map(q => {
+        const percentageMatch = q.latestScore.match(/(\d+)%/);
+        return percentageMatch ? parseInt(percentageMatch[1]) : 0;
+    }).filter(score => score > 0);
+
+    const combinedEocKhanScores = [...allEocKhanScores, ...allKhanScores];
+    if (combinedEocKhanScores.length > 0) {
+        transformedData.latestScores.avgEocKhan = Math.round(combinedEocKhanScores.reduce((sum, score) => sum + score, 0) / combinedEocKhanScores.length);
+    }
+
+
+    console.log("Transformed Data:", transformedData);
+    return transformedData;
 }
 
+
+// --- Rest of your existing script.js code remains here ---
+// (setupEventListeners, populateOverview, initializeOverviewCharts,
+// populateSkillsHub, populatePracticeTestsTable, populateEOCPractice,
+// populateKhanAcademy, modal functions, renderQuestionAnalysisCard,
+// getChaptersForSkill, renderDynamicCharts, renderPacingBarChart,
+// addExplanationToggleListeners)
+
+// This function will be called once the page is loaded
+document.addEventListener('DOMContentLoaded', function () {
+    // --- Chart.js Global Configuration ---
+    Chart.defaults.font.family = 'Inter';
+    Chart.defaults.plugins.legend.position = 'bottom';
+    Chart.defaults.responsive = true;
+    Chart.defaults.maintainAspectRatio = false;
+
+    // Call the main data loading function
+    loadAndDisplayData();
+    setupEventListeners(); // Set up event listeners after data loading initiation
+});
 
 /**
  * Sets up all the interactive elements like tabs, mobile menu, and the refresh button.
@@ -807,8 +592,12 @@ function setupEventListeners() {
     document.getElementById('currentYear').textContent = new Date().getFullYear();
 
     hamburgerButton?.addEventListener('click', () => mobileMenu?.classList.toggle('hidden'));
-    refreshDataBtn?.addEventListener('click', handleRefreshData); // Handle refresh data button click
+    refreshDataBtn?.addEventListener('click', handleRefreshData);
 
+    /**
+     * Handles switching between main tabs.
+     * @param {HTMLElement} tabElement - The button element that was clicked.
+     */
     const switchMainTab = (tabElement) => {
         const targetTabName = tabElement.getAttribute('data-main-tab');
 
@@ -829,10 +618,12 @@ function setupEventListeners() {
             // For subject tabs, activate the default sub-tab (Skills Hub)
             const firstSubTabButton = document.querySelector(`#${targetTabName}-content .sub-tab-button[data-sub-tab="${targetTabName}-skills-hub"]`);
             if (firstSubTabButton) {
-                firstSubTabButton.click(); // Programmatically click it to trigger its rendering logic
+                switchSubTab(firstSubTabButton); // Programmatically click it
             }
         }
-        mobileMenu?.classList.add('hidden'); // Hide mobile menu after selection
+
+        // Hide mobile menu after selection
+        mobileMenu?.classList.add('hidden');
     };
 
     // Attach event listeners to main tab buttons
@@ -844,6 +635,10 @@ function setupEventListeners() {
         });
     });
 
+    /**
+     * Handles switching between sub-tabs within a main tab.
+     * @param {HTMLElement} subTabElement - The button element that was clicked.
+     */
     const switchSubTab = (subTabElement) => {
         const parentMainContent = subTabElement.closest('.main-tab-content');
         const targetSubTabName = subTabElement.getAttribute('data-sub-tab');
@@ -861,7 +656,6 @@ function setupEventListeners() {
             const subject = targetSubTabName.replace('-skills-hub', '');
             populateSkillsHub(subject, currentStudentData.skills[subject] || []);
         }
-        // No specific rendering needed for EOC/Khan sub-tabs as they are populated on initial loadAndDisplayData
     };
 
     // Attach event listeners to sub-tab buttons
@@ -869,21 +663,18 @@ function setupEventListeners() {
         subTab.addEventListener('click', () => switchSubTab(subTab));
     });
 
-    // Manually trigger click on the initial active tab (Overview) to set up the dashboard on first load
-    // This needs to be done AFTER all event listeners are set up.
+    // Manually trigger click on the initial active tab (Overview) to set up the dashboard
     document.querySelector('.main-tab-button[data-main-tab="overview"]')?.click();
 }
 
 /**
- * Handles data refresh, re-fetches data and re-renders the dashboard.
+ * Placeholder for future data refresh logic (e.g., Google App Script call).
  */
 function handleRefreshData() {
     console.log("Refresh Data button clicked! Initiating data reload.");
     alert("Refreshing data from Google Sheets...");
-    loadAndDisplayData(); // Reload data based on current filter selection
+    loadAndDisplayData(); // Re-fetch and re-display all data
 }
-
-// --- Dashboard Population Functions ---
 
 /**
  * Populates the entire overview tab, including KPIs and dynamic strengths/weaknesses.
@@ -892,18 +683,10 @@ function populateOverview(data) {
     // Populate KPI cards
     const kpiContainer = document.getElementById('overview-kpis');
     kpiContainer.innerHTML = `
-        <div class="score-card"><h3 class="text-md font-medium text-gray-600">Latest Total Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.total} <span class="text-lg text-gray-500">/ 1600</span> ${getPerformanceArrow(data.latestScores.total, data.latestScores.classAvgTotal)}</p>
-        <p class="text-sm text-gray-500">Class Avg: ${data.latestScores.classAvgTotal}</p></div>
-
-        <div class="score-card"><h3 class="text-md font-medium text-gray-600">Latest R&W Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.rw} <span class="text-lg text-gray-500">/ 800</span> ${getPerformanceArrow(data.latestScores.rw, data.latestScores.classAvgRW)}</p>
-        <p class="text-sm text-gray-500">Class Avg: ${data.latestScores.classAvgRW}</p></div>
-
-        <div class="score-card"><h3 class="text-md font-medium text-gray-600">Latest Math Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.math} <span class="text-lg text-gray-500">/ 800</span> ${getPerformanceArrow(data.latestScores.math, data.latestScores.classAvgMath)}</p>
-        <p class="text-sm text-gray-500">Class Avg: ${data.latestScores.classAvgMath}</p></div>
-
-        <div class="score-card"><h3 class="text-md font-medium text-gray-600">Avg EOC Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.avgEocKhan}% ${getPerformanceArrow(data.latestScores.avgEocKhan, data.latestScores.classAvgEocKhan)}</p>
-        <p class="text-sm text-gray-500">Class Avg: ${data.latestScores.classAvgEocKhan}%</p></div>
-
+        <div class="score-card"><h3 class="text-md font-medium text-gray-600">Latest Total Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.total} <span class="text-lg text-gray-500">/ 1600</span></p></div>
+        <div class="score-card"><h3 class="text-md font-medium text-gray-600">Latest R&W Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.rw} <span class="text-lg text-gray-500">/ 800</span></p></div>
+        <div class="score-card"><h3 class="text-md font-medium text-gray-600">Latest Math Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.math} <span class="text-lg text-gray-500">/ 800</span></p></div>
+        <div class="score-card"><h3 class="text-md font-medium text-gray-600">Avg EOC Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.avgEocKhan}%</p></div>
         <div class="score-card"><h3 class="text-md font-medium text-gray-600">Your Target Score</h3><p class="text-3xl font-bold" style="color: #8a3ffc;">${data.targetScore}</p></div>`;
 
     // Populate Strengths & Weaknesses
@@ -911,12 +694,9 @@ function populateOverview(data) {
     const strengths = [...allSkills].sort((a, b) => b.score - a.score).slice(0, 3);
     const weaknesses = [...allSkills].sort((a, b) => a.score - b.score).slice(0, 3);
 
-    const renderList = (items, defaultMessage) => {
-        if (items.length === 0) return `<p class="text-gray-500 text-center p-2">${defaultMessage}</p>`;
-        return `<ul class="list-disc list-inside space-y-1 text-gray-600">${items.map(item => `<li>${item.name} (${item.score}%) ${getPerformanceArrow(item.score, item.classAvg)}</li>`).join('')}</ul>`;
-    }
-    document.getElementById('overviewStrengthsContainer').innerHTML = renderList(strengths, "No strengths identified yet.");
-    document.getElementById('overviewImprovementsContainer').innerHTML = renderList(weaknesses, "No areas for improvement identified yet.");
+    const renderList = (items) => items.map(item => `<li>${item.name} (${item.score}%)</li>`).join('');
+    document.getElementById('overviewStrengthsContainer').innerHTML = `<ul class="list-disc list-inside space-y-1 text-gray-600">${renderList(strengths)}</ul>`;
+    document.getElementById('overviewImprovementsContainer').innerHTML = `<ul class="list-disc list-inside space-y-1 text-gray-600">${renderList(weaknesses)}</ul>`;
 
     // Populate Time Spent
     document.getElementById('timeSpentOverview').innerHTML = `<p class="text-gray-600">Your Avg: <span class="font-semibold">${data.timeSpent.studentAvg} ${data.timeSpent.studentUnit}</span></p><p class="text-gray-600">Class Avg: <span class="font-semibold">${data.timeSpent.classAvg} ${data.timeSpent.classUnit}</span></p>`;
@@ -931,28 +711,29 @@ function initializeOverviewCharts(data) {
     const scoreTrendChartCanvas = document.getElementById('scoreTrendChart');
     if (!scoreTrendChartCanvas) {
         console.warn("Score Trend Chart canvas not found. Cannot initialize chart.");
-        return;
+        // If the canvas is genuinely missing, add a placeholder message instead.
+        const parentDiv = document.querySelector('.themed-card.chart-container .themed-card-body'); // Find the parent div
+        if (parentDiv && !parentDiv.querySelector('canvas')) { // Only add if no canvas is present
+             parentDiv.innerHTML = '<p class="text-center p-4 text-gray-500">Score trend chart not available (canvas element missing or replaced).</p>';
+        }
+        return; // Exit if canvas is missing
     }
-
-    const parentScoreTrendDiv = scoreTrendChartCanvas.parentNode;
-    let noDataMessageScoreTrend = document.getElementById('scoreTrendChartNoData');
 
     const existingScoreTrendChart = Chart.getChart('scoreTrendChart');
     if (existingScoreTrendChart) {
-        existingScoreTrendChart.destroy();
+        existingScoreTrendChart.destroy(); // Destroy existing chart instance if it exists
     }
 
     if (data.scoreTrend && data.scoreTrend.labels.length > 0) {
-        scoreTrendChartCanvas.style.display = 'block';
-        if (noDataMessageScoreTrend) noDataMessageScoreTrend.remove();
-
+        // Ensure the canvas element is still there to draw on
+        scoreTrendChartCanvas.style.display = 'block'; // Ensure it's visible if hidden
         new Chart(scoreTrendChartCanvas, {
             type: 'line',
             data: {
                 labels: data.scoreTrend.labels,
                 datasets: [
-                    { label: 'Your Score', data: data.scoreTrend.studentScores, borderColor: '#2a5266', tension: 0.1, fill: false, pointRadius: 5, pointBackgroundColor: '#2a5266' },
-                    { label: 'Class Average', data: data.scoreTrend.classAvgScores, borderColor: '#757575', borderDash: [5, 5], tension: 0.1, fill: false, pointRadius: 3, pointBackgroundColor: '#757575' }
+                    { label: 'Your Score', data: data.scoreTrend.studentScores, borderColor: '#2a5266', tension: 0.1 },
+                    { label: 'Class Average', data: data.scoreTrend.classAvgScores, borderColor: '#757575', borderDash: [5, 5], tension: 0.1 }
                 ]
             },
             options: {
@@ -963,53 +744,55 @@ function initializeOverviewCharts(data) {
                         position: 'bottom',
                         labels: {
                             boxWidth: 12,
-                            font: { size: 10 }
+                            font: {
+                                size: 10
+                            }
                         }
                     },
                     tooltip: {
                         mode: 'index',
                         intersect: false,
-                        callbacks: {
-                            label: function(context) {
-                                return `${context.dataset.label}: ${context.parsed.y}`;
-                            }
-                        }
                     }
                 },
                 scales: {
                     y: {
-                        beginAtZero: false,
-                        max: 1600,
-                        min: 400,
-                        title: { display: true, text: 'Score' }
+                        beginAtZero: true,
+                        max: 1600, // Max score for SAT Total
+                        title: {
+                            display: true,
+                            text: 'Score'
+                        }
                     },
                     x: {
-                        title: { display: true, text: 'Assessment' },
-                        grid: { display: false }
+                        title: {
+                            display: true,
+                            text: 'Assessment'
+                        }
                     }
                 }
             }
         });
     } else {
-        scoreTrendChartCanvas.style.display = 'none';
-        if (!noDataMessageScoreTrend) {
-            noDataMessageScoreTrend = document.createElement('p');
-            noDataMessageScoreTrend.id = 'scoreTrendChartNoData';
-            noDataMessageScoreTrend.className = 'text-center p-4 text-gray-500';
-            noDataMessageScoreTrend.textContent = 'No score trend data available.';
-            parentScoreTrendDiv.appendChild(noDataMessageScoreTrend);
-        }
+        // Hide canvas and show "No data available" message
+        scoreTrendChartCanvas.style.display = 'none'; // Hide the canvas
+        scoreTrendChartCanvas.parentNode.innerHTML += '<p class="text-center p-4 text-gray-500" id="scoreTrendChartNoData">No score trend data available.</p>';
+        // Make sure previous "No data" message is removed if data becomes available
+        const existingNoData = document.getElementById('scoreTrendChartNoData');
+        if (existingNoData) existingNoData.remove();
     }
+
 
     // --- Overall Skill Performance Chart ---
     const overallSkillChartCanvas = document.getElementById('overallSkillChart');
     if (!overallSkillChartCanvas) {
         console.warn("Overall Skill Chart canvas not found. Cannot initialize chart.");
-        return;
+        // Similar placeholder logic for the overall skill chart's parent
+        const parentDiv = document.querySelector('.themed-card.chart-container:nth-of-type(2) .themed-card-body');
+        if (parentDiv && !parentDiv.querySelector('canvas')) {
+             parentDiv.innerHTML = '<p class="text-center p-4 text-gray-500">Overall skill performance chart not available (canvas element missing or replaced).</p>';
+        }
+        return; // Exit if canvas is missing
     }
-
-    const parentOverallSkillDiv = overallSkillChartCanvas.parentNode;
-    let noDataMessageOverallSkill = document.getElementById('overallSkillChartNoData');
 
     const existingOverallSkillChart = Chart.getChart('overallSkillChart');
     if (existingOverallSkillChart) {
@@ -1017,16 +800,14 @@ function initializeOverviewCharts(data) {
     }
 
     if (data.overallSkillPerformance && data.overallSkillPerformance.labels.length > 0) {
-        overallSkillChartCanvas.style.display = 'block';
-        if (noDataMessageOverallSkill) noDataMessageOverallSkill.remove();
-
+        overallSkillChartCanvas.style.display = 'block'; // Ensure it's visible if hidden
         new Chart(overallSkillChartCanvas, {
             type: 'bar',
             data: {
                 labels: data.overallSkillPerformance.labels,
                 datasets: [
-                    { label: 'Your Accuracy', data: data.overallSkillPerformance.studentAccuracy, backgroundColor: 'rgba(42, 82, 102, 0.8)', barPercentage: 0.8, categoryPercentage: 0.8 },
-                    { label: 'Class Average', data: data.overallSkillPerformance.classAvgAccuracy, backgroundColor: 'rgba(117, 117, 117, 0.7)', barPercentage: 0.8, categoryPercentage: 0.8 }
+                    { label: 'Your Accuracy', data: data.overallSkillPerformance.studentAccuracy, backgroundColor: 'rgba(42, 82, 102, 0.8)' },
+                    { label: 'Class Average', data: data.overallSkillPerformance.classAvgAccuracy, backgroundColor: 'rgba(117, 117, 117, 0.7)' }
                 ]
             },
             options: {
@@ -1037,7 +818,9 @@ function initializeOverviewCharts(data) {
                         position: 'bottom',
                         labels: {
                             boxWidth: 12,
-                            font: { size: 10 }
+                            font: {
+                                size: 10
+                            }
                         }
                     },
                     tooltip: {
@@ -1061,26 +844,30 @@ function initializeOverviewCharts(data) {
                     y: {
                         beginAtZero: true,
                         max: 100,
-                        title: { display: true, text: 'Accuracy (%)' }
+                        title: {
+                            display: true,
+                            text: 'Accuracy (%)'
+                        }
                     },
                     x: {
-                        title: { display: true, text: 'Subject' },
-                        grid: { display: false }
+                        title: {
+                            display: true,
+                            text: 'Subject'
+                        }
                     }
                 }
             }
         });
     } else {
-        overallSkillChartCanvas.style.display = 'none';
-        if (!noDataMessageOverallSkill) {
-            noDataMessageOverallSkill = document.createElement('p');
-            noDataMessageOverallSkill.id = 'overallSkillChartNoData';
-            noDataMessageOverallSkill.className = 'text-center p-4 text-gray-500';
-            noDataMessageOverallSkill.textContent = 'No overall skill performance data available.';
-            parentOverallSkillDiv.appendChild(noDataMessageOverallSkill);
-        }
+        // Hide canvas and show "No data available" message
+        overallSkillChartCanvas.style.display = 'none'; // Hide the canvas
+        overallSkillChartCanvas.parentNode.innerHTML += '<p class="text-center p-4 text-gray-500" id="overallSkillChartNoData">No overall skill performance data available.</p>';
+        // Make sure previous "No data" message is removed if data becomes available
+        const existingNoData = document.getElementById('overallSkillChartNoData');
+        if (existingNoData) existingNoData.remove();
     }
 }
+// ... (rest of your script.js code below initializeOverviewCharts) ...
 
 // --- Subject-Specific Functions ---
 
@@ -1095,29 +882,27 @@ function populateSkillsHub(subject, skills) {
     const container = document.getElementById(`${subject}-skills-hub-body`);
     if (!container) return;
 
-    // Filter out skills with 'TBD_No_Correlation_Or_CustomQID' and sort
-    const relevantSkills = skills.filter(s => s.name && !String(s.name).includes('TBD_No_Correlation_Or_CustomQID'));
-    relevantSkills.sort((a, b) => a.score - b.score);
+    skills.sort((a, b) => a.score - b.score); // Sort by weakest first
 
-    if (relevantSkills.length === 0) {
-        container.innerHTML = `<p class="text-center p-4 text-gray-500">No skill data available for ${subject}. Ensure skill tags are well-populated in the data source.</p>`;
+    if (skills.length === 0) {
+        container.innerHTML = `<p class="text-center p-4 text-gray-500">No skill data available for ${subject}.</p>`;
         return;
     }
 
-    container.innerHTML = relevantSkills.map(skill => {
+    container.innerHTML = skills.map(skill => {
         const performanceClass = skill.attempted ? (skill.score >= 85 ? 'performance-good' : skill.score >= 70 ? 'performance-average' : 'performance-poor') : 'performance-na';
-        const displayScore = typeof skill.score === 'number' ? skill.score : 0; // Ensure number for width style
         return `
         <div class="p-3 bg-gray-50 rounded-md border border-gray-200 mb-2 skill-item-container" onclick="openSkillIncorrectQuestionsModal('${skill.name}', '${subject}')">
             <div class="flex justify-between items-center mb-1">
                 <span class="text-sm font-medium text-gray-800">${skill.name}</span>
-                <span class="text-xs font-semibold">${skill.attempted ? skill.score + '%' : 'N/A'} ${getPerformanceArrow(skill.score, skill.classAvg)}</span>
+                <span class="text-xs font-semibold">${skill.attempted ? skill.score + '%' : 'N/A'}</span>
             </div>
-            <div class="progress-bar-container"><div class="progress-bar ${performanceClass}" style="width: ${displayScore}%"></div></div>
+            <div class="progress-bar-container"><div class="progress-bar ${performanceClass}" style="width: ${skill.attempted ? skill.score : 0}%"></div></div>
             <p class="text-xs text-gray-500 mt-1">Class Avg: ${skill.classAvg}%</p>
         </div>`;
     }).join('');
 }
+
 
 /**
  * Populates the main table of CB Practice Tests.
@@ -1129,30 +914,19 @@ function populatePracticeTestsTable(tests) {
     if (!tableBody) return;
 
     if (tests.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="8" class="text-center text-gray-500">No CB practice test data available.</td></tr>`; // Updated colspan
+        tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-gray-500">No CB practice test data available.</td></tr>`;
         return;
     }
 
     tableBody.innerHTML = tests.map(test => {
         const isAttempted = test.date && test.date !== "Not Attempted" && test.date !== "-";
-        const totalScore = test.total !== null && test.total !== '-' ? test.total : '-';
-        const rwScore = test.rw !== null && test.rw !== '-' ? test.rw : '-';
-        const mathScore = test.math !== null && test.math !== '-' ? test.math : '-';
-
-        const classAvgTotal = test.classAvgTotal !== null && test.classAvgTotal !== '-' ? test.classAvgTotal : 'N/A';
-        const classAvgRW = test.classAvgRW !== null && test.classAvgRW !== '-' ? test.classAvgRW : 'N/A'; // Still N/A if not in source
-        const classAvgMath = test.classAvgMath !== null && test.classAvgMath !== '-' ? test.classAvgMath : 'N/A'; // Still N/A if not in source
-
         return `
         <tr class="${isAttempted ? 'clickable-row' : 'opacity-60'}" ${isAttempted ? `onclick="openTestQuestionsModal('${test.name}')"` : ''}>
-            <td>${test.displayName}</td>
+            <td>${test.name}</td>
             <td>${formatDate(test.date)}</td>
-            <td>${rwScore} ${getPerformanceArrow(rwScore, classAvgRW)}</td>
-            <td>${mathScore} ${getPerformanceArrow(mathScore, classAvgMath)}</td>
-            <td>${totalScore} ${getPerformanceArrow(totalScore, classAvgTotal)}</td>
-            <td>${classAvgRW}</td>
-            <td>${classAvgMath}</td>
-            <td>${classAvgTotal}</td>
+            <td>${test.rw}</td>
+            <td>${test.math}</td>
+            <td>${test.total}</td>
         </tr>`;
     }).join('');
 }
@@ -1167,34 +941,32 @@ function populateEOCPractice(subject, quizzes) {
     const tableBody = document.getElementById(`${subject}-eoc-tbody`);
     if (!tableBody) return;
 
+    // Dynamically generate table header for EOC quizzes based on first quiz structure
     const eocThead = document.getElementById(`${subject}-eoc-thead`);
-    if (eocThead) { // Ensure thead exists before manipulating
-        const headers = ['Quiz Name', 'Date Attempted', 'Latest Score', 'Class Avg Score'];
+    if (eocThead && quizzes.length > 0) {
+        const headers = ['Quiz Name', 'Date Attempted', 'Latest Score'];
         eocThead.innerHTML = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
+    } else if (eocThead) {
+        eocThead.innerHTML = `<tr><th>Quiz Name</th><th>Date Attempted</th><th>Latest Score</th></tr>`; // Fallback header
     }
 
     if (quizzes.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500">No EOC practice data available for ${subject}.</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="3" class="text-center text-gray-500">No EOC practice data available for ${subject}.</td></tr>`;
         return;
     }
 
-    tableBody.innerHTML = quizzes.map(quiz => {
-        const isAttempted = quiz.date && quiz.date !== "Not Attempted" && quiz.date !== "-";
-        const studentScoreNum = parseFloat(String(quiz.latestScore).match(/(\d+)%/)?.[1]); // Extract percentage number
-        const classAvgScoreNum = parseFloat(String(quiz.classAvgScore).match(/(\d+)%/)?.[1]); // Extract percentage number
-
-        return `
-        <tr class="${isAttempted ? 'clickable-row' : 'opacity-60'}" ${isAttempted ? `onclick="openEOCQuizQuestionsModal('${quiz.rawName}', '${subject}')"` : ''}>
+    tableBody.innerHTML = quizzes.map(quiz => `
+        <tr class="clickable-row" onclick="openEOCQuizQuestionsModal('${quiz.name}', '${subject}')">
             <td>${quiz.name}</td>
             <td>${formatDate(quiz.date)}</td>
-            <td>${quiz.latestScore} ${getPerformanceArrow(studentScoreNum, classAvgScoreNum)}</td>
-            <td>${quiz.classAvgScore}</td>
+            <td>${quiz.latestScore}</td>
         </tr>
     `).join('');
 }
 
 /**
  * Populates Khan Academy Practice sections.
+ * (Currently just a placeholder as dummy data is empty for Khan)
  * @param {string} subject - The subject ('reading', 'writing', 'math').
  * @param {Array} khanData - Array of Khan Academy data.
  */
@@ -1206,14 +978,8 @@ function populateKhanAcademy(subject, khanData) {
         container.innerHTML = `<p class="text-gray-500 text-center p-4">No Khan Academy data available for ${subject}.</p>`;
         return;
     }
-    // Display Khan Academy data in a simple list format
-    container.innerHTML = `<div class="space-y-2 p-2">
-        ${khanData.map(d => {
-            const studentScoreNum = parseFloat(String(d.latestScore).match(/(\d+)%/)?.[1]);
-            const classAvgScoreNum = parseFloat(String(d.classAvgScore).match(/(\d+)%/)?.[1]);
-            return `<p class="text-gray-600"><strong>${d.name}</strong>: ${d.latestScore} ${getPerformanceArrow(studentScoreNum, classAvgScoreNum)} (Class Avg: ${d.classAvgScore})</p>`;
-        }).join('')}
-    </div>`;
+    // Implement rendering for Khan Academy data here when dummy data is available
+    container.innerHTML = `<p class="text-gray-500 text-center p-4">Khan Academy data for ${subject} will be displayed here once fetched and transformed.</p>`;
 }
 
 // --- Modals and Detailed View Functions ---
@@ -1223,107 +989,108 @@ const modalTitle = document.getElementById('modalTitle');
 const modalBody = document.getElementById('modalBody');
 
 /**
- * Opens the modal to show ALL incorrect questions for a specific skill.
+ * Opens the modal to show ALL incorrect questions for a specific skill,
+ * triggered from the "Skills Hub" (by clicking a skill performance bar).
+ * Questions are sorted by difficulty.
  * @param {string} skillName - The name of the skill to filter by.
- * @param {string} subject - The subject of the skill.
+ * @param {string} subject - The subject of the skill (e.g., 'reading').
  */
 function openSkillIncorrectQuestionsModal(skillName, subject) {
     modalTitle.textContent = `Incorrect Questions for: ${skillName} (${subject.charAt(0).toUpperCase() + subject.slice(1)})`;
 
+    // Filter all questions for the specific skill and ensure they are incorrect
     const incorrectQuestions = ALL_DASHBOARD_QUESTIONS.filter(q =>
         q.skill === skillName && !q.isCorrect && q.subject === subject
     );
-    const difficultyOrder = { "Hard": 1, "Medium": 2, "Easy": 3, "unknown": 4 }; // Added unknown difficulty
+
+    // Sort by difficulty: Hard > Medium > Easy
+    const difficultyOrder = { "Hard": 1, "Medium": 2, "Easy": 3 };
     incorrectQuestions.sort((a, b) => difficultyOrder[a.difficulty] - difficultyOrder[b.difficulty]);
 
     if (incorrectQuestions.length === 0) {
-        modalBody.innerHTML = `
-            <div class="question-analysis-card">
-                <div class="question-analysis-header">
-                    <span class="font-semibold text-gray-700">${skillName}</span>
-                    <span class="meta-item text-gray-500">Subject: ${subject.charAt(0).toUpperCase() + subject.slice(1)}</span>
-                </div>
-                <div class="question-analysis-body">
-                    <p class="text-center p-5 text-gray-600">No incorrect questions found for "${skillName}" in ${subject} for this student.</p>
-                </div>
-            </div>`;
+        modalBody.innerHTML = `<p class="text-center p-5 text-gray-600">No incorrect questions found for "${skillName}" in ${subject}.</p>`;
     } else {
+        // Render each question as a detailed analysis card (without pacing here)
         modalBody.innerHTML = incorrectQuestions.map((q, index) => renderQuestionAnalysisCard(q, `skill-${index}`, false)).join('');
     }
     modal.style.display = "block";
-    renderDynamicCharts();
-    addExplanationToggleListeners();
+    renderDynamicCharts(); // Render charts AFTER content is in the DOM
+    addExplanationToggleListeners(); // Add listeners for explanation toggles
 }
 
 /**
- * Opens the modal to show ALL questions for a specific CB Practice Test.
- * @param {string} testName - The raw name of the test (e.g., 'CB-T4').
+ * Opens the modal to show ALL questions for a specific CB Practice Test,
+ * and includes a pacing analysis table at the bottom.
+ * @param {string} testName - The name of the test.
  */
 function openTestQuestionsModal(testName) {
+    modalTitle.textContent = `Reviewing Test: ${testName}`;
     const test = currentStudentData.cbPracticeTests.find(t => t.name === testName);
-    modalTitle.textContent = `Reviewing Test: ${test ? test.displayName : testName}`;
-    
+
     if (!test || !test.questions || test.questions.length === 0) {
-        modalBody.innerHTML = `<p class="text-center p-5 text-gray-600">No questions found for ${test ? test.displayName : testName}.</p>`;
+        modalBody.innerHTML = `<p class="text-center p-5 text-gray-600">No questions found for ${testName}.</p>`;
         modal.style.display = "block";
         return;
     }
 
+    // Render each question as a single question analysis card, including pacing
     let content = test.questions.map((q, index) => renderQuestionAnalysisCard(q, `test-${index}`, true)).join('');
 
-    // Pacing Analysis Section
-    content += `<h3 class="text-lg font-semibold text-gray-800 border-t pt-4 mt-6">Pacing Analysis</h3>`;
-    if (test.questions.some(q => typeof q.yourTime === 'number' && typeof q.classAvgTime === 'number')) {
-        content += `<div class="pacing-bar-chart-container"><canvas id="pacingBarChart"></canvas></div>`;
-        
+    // Append pacing analysis at the bottom if pacing data exists
+    if (test.questions.some(q => q.yourTime !== undefined && q.classAvgTime !== undefined)) {
+        content += `<h3 class="text-lg font-semibold text-gray-800 border-t pt-4 mt-6">Pacing Analysis</h3>`;
+        content += `<div class="pacing-bar-chart-container"><canvas id="pacingBarChart"></canvas></div>`; // Placeholder for bar chart
+
         const pacingRows = test.questions.map((p, index) => {
-            const diff = (p.yourTime || 0) - (p.classAvgTime || 0);
+            const diff = p.yourTime - p.classAvgTime;
             const status = diff > 15 ? 'Slower' : diff < -15 ? 'Faster' : 'On Pace';
             const statusClass = `pacing-${status.toLowerCase().replace(' ', '-')}`;
-            return `<tr><td>${index + 1}</td><td>${p.yourTime || 'N/A'}s</td><td>${p.classAvgTime || 'N/A'}s</td><td><span class="pacing-badge ${statusClass}">${status}</span></td><td class="${p.isCorrect ? 'text-good' : 'text-poor'} font-semibold">${p.isCorrect ? 'Correct' : 'Incorrect'}</td></tr>`;
+            return `<tr><td>${index + 1}</td><td>${p.yourTime}s</td><td>${p.classAvgTime}s</td><td><span class="pacing-badge ${statusClass}">${status}</span></td><td class="${p.isCorrect ? 'text-good' : 'text-poor'} font-semibold">${p.isCorrect ? 'Correct' : 'Incorrect'}</td></tr>`;
         }).join('');
         content += `<div class="overflow-x-auto mt-4"><table class="min-w-full table"><thead><tr><th>Q#</th><th>Your Time</th><th>Class Avg</th><th>Pacing</th><th>Result</th></tr></thead><tbody>${pacingRows}</tbody></table></div>`;
-    } else {
-        content += `<p class="text-center p-5 text-gray-600">No pacing data available for this test.</p>`;
     }
 
     modalBody.innerHTML = content;
     modal.style.display = "block";
-    renderDynamicCharts();
-    addExplanationToggleListeners();
-    if (test.questions.some(q => typeof q.yourTime === 'number') && document.getElementById('pacingBarChart')) {
+    renderDynamicCharts(); // Render donut charts AFTER content is in the DOM
+    addExplanationToggleListeners(); // Add listeners for explanation toggles
+    if (test.questions.some(q => q.yourTime !== undefined)) { // Only render pacing bar chart if data exists
         renderPacingBarChart('pacingBarChart', test.questions);
     }
 }
 
 /**
  * Opens the modal to show ALL questions for a specific EOC Quiz.
- * @param {string} quizRawName - The raw name of the EOC quiz.
+ * Pacing data is NOT included for EOC quizzes.
+ * @param {string} quizName - The name of the EOC quiz.
  * @param {string} subject - The subject of the EOC quiz.
  */
-function openEOCQuizQuestionsModal(quizRawName, subject) {
+function openEOCQuizQuestionsModal(quizName, subject) {
+    modalTitle.textContent = `Reviewing EOC Quiz: ${quizName} (${subject.charAt(0).toUpperCase() + subject.slice(1)})`;
     const quizzesForSubject = currentStudentData.eocQuizzes[subject] || [];
-    const quiz = quizzesForSubject.find(q => q.rawName === quizRawName);
+    const quiz = quizzesForSubject.find(q => q.name === quizName);
 
-    modalTitle.textContent = `Reviewing EOC Quiz: ${quiz ? quiz.name : quizRawName} (${subject.charAt(0).toUpperCase() + subject.slice(1)})`;
-    
     if (!quiz || !quiz.questions || quiz.questions.length === 0) {
-        modalBody.innerHTML = `<p class="text-center p-5 text-gray-600">No questions found for ${quiz ? quiz.name : quizRawName}.</p>`;
+        modalBody.innerHTML = `<p class="text-center p-5 text-gray-600">No questions found for ${quizName}.</p>`;
         modal.style.display = "block";
         return;
     }
 
-    let content = quiz.questions.map((q, index) => renderQuestionAnalysisCard(q, `eoc-${index}`, false)).join('');
+    // Render each question as a single question analysis card, without pacing info
+    let content = quiz.questions.map((q, index) => renderQuestionAnalysisCard(q, `eoc-${index}`, false)).join(''); // `false` for pacing
+
     modalBody.innerHTML = content;
     modal.style.display = "block";
-    renderDynamicCharts();
-    addExplanationToggleListeners();
+    renderDynamicCharts(); // Render donut charts AFTER content is in the DOM
+    addExplanationToggleListeners(); // Add listeners for explanation toggles
 }
 
+
 /**
- * Closes the modal and cleans up any Chart.js instances.
+ * Closes the modal and cleans up any Chart.js instances to prevent memory leaks.
  */
 function closeModal() {
+    // Destroy all Chart.js instances within the modal body
     const canvases = modalBody.querySelectorAll('canvas');
     canvases.forEach(canvas => {
         const chart = Chart.getChart(canvas);
@@ -1333,7 +1100,7 @@ function closeModal() {
     });
 
     modal.style.display = "none";
-    modalBody.innerHTML = '';
+    modalBody.innerHTML = ''; // Clear content to prevent old data flashing
 }
 window.onclick = (event) => {
     if (event.target == modal) {
@@ -1341,8 +1108,16 @@ window.onclick = (event) => {
     }
 };
 
+// --- Reusable HTML Renderer for a Single Question ---
+
 /**
  * Renders a self-contained card for a single question's analysis.
+ * This function now includes class performance percentage, a mini donut,
+ * and a toggle for explanation.
+ * @param {object} q - The question object.
+ * @param {string} uniqueIdPrefix - A unique prefix for element IDs within the card (e.g., 'skill-0', 'test-1').
+ * @param {boolean} includePacing - Whether to show the pacing information for this question.
+ * @returns {string} - The HTML string for the card.
  */
 function renderQuestionAnalysisCard(q, uniqueIdPrefix, includePacing = false) {
     const resultText = q.isCorrect ? "Correct" : "Incorrect";
@@ -1350,15 +1125,12 @@ function renderQuestionAnalysisCard(q, uniqueIdPrefix, includePacing = false) {
     const sourceInfo = q.source ? `<span class="meta-item text-gray-500">Source: ${q.source}</span>` : '';
     const questionTextDisplay = q.text ? `<p class="mb-2 text-gray-800 font-medium">${q.text}</p>` : `<p class="mb-2 text-gray-800 font-medium">Question ID: ${q.id}</p>`;
 
-    const pacingHtml = includePacing && typeof q.yourTime === 'number' && typeof q.classAvgTime === 'number' ?
+    const pacingHtml = includePacing && q.yourTime !== undefined ?
         `<p class="text-center text-sm mt-2">Pacing: <strong>${q.yourTime}s</strong> (Class Avg: ${q.classAvgTime}s)</p>` : '';
 
     const classCorrectPercentage = q.classPerformance ? q.classPerformance.correct : 'N/A';
-    const studentPerformanceForArrow = q.isCorrect ? 100 : 0;
-    const classAvgForArrow = parseFloat(classCorrectPercentage);
-    const classAvgArrow = getPerformanceArrow(studentPerformanceForArrow, classAvgForArrow);
 
-    const explanationHtml = q.explanation && q.explanation !== "No explanation provided in raw data." ? `
+    const explanationHtml = q.explanation ? `
         <button class="toggle-explanation-btn" data-target="explanation-${uniqueIdPrefix}-${q.id}">Show Explanation</button>
         <div id="explanation-${uniqueIdPrefix}-${q.id}" class="answer-explanation">
             <p class="font-semibold text-sm">Explanation</p>
@@ -1366,6 +1138,7 @@ function renderQuestionAnalysisCard(q, uniqueIdPrefix, includePacing = false) {
         </div>
     ` : '';
 
+    // Get relevant chapters for review based on skill
     const relevantChapters = getChaptersForSkill(q.skill, q.subject);
     const chapterReviewHtml = relevantChapters.length > 0 ? `
         <div class="mt-4 p-3 bg-blue-50 rounded-md border border-blue-200 text-sm">
@@ -1376,12 +1149,10 @@ function renderQuestionAnalysisCard(q, uniqueIdPrefix, includePacing = false) {
         </div>
     ` : '';
 
-    const displaySkillName = (q.skill && !String(q.skill).includes('TBD_No_Correlation_Or_CustomQID')) ? q.skill : 'Unidentified Skill';
-
     return `
     <div class="question-analysis-card">
         <div class="question-analysis-header">
-            <span class="font-semibold text-gray-700">${displaySkillName}</span>
+            <span class="font-semibold text-gray-700">${q.skill}</span>
             <span class="difficulty-badge difficulty-${q.difficulty}">${q.difficulty}</span>
             ${sourceInfo}
         </div>
@@ -1389,12 +1160,12 @@ function renderQuestionAnalysisCard(q, uniqueIdPrefix, includePacing = false) {
             <div>
                 ${questionTextDisplay}
                 <p>Your Answer: <span class="font-semibold ${resultClass}">${q.yourAnswer}</span> <span class="font-bold">(${resultText})</span></p>
-                ${!q.isCorrect && q.correctAnswer !== "Not provided in raw data" ? `<p>Correct Answer: <span class="font-semibold text-good">${q.correctAnswer}</span></p>` : ''}
+                ${!q.isCorrect ? `<p>Correct Answer: <span class="font-semibold text-good">${q.correctAnswer}</span></p>` : ''}
                 ${explanationHtml}
                 ${chapterReviewHtml}
             </div>
             <div>
-                <p class="text-center text-sm font-semibold mb-2">Class Performance: ${classCorrectPercentage}% Correct ${classAvgArrow}</p>
+                <p class="text-center text-sm font-semibold mb-2">Class Performance: ${classCorrectPercentage}% Correct</p>
                 <div class="question-chart-container">
                     <canvas id="chart-${uniqueIdPrefix}-${q.id}"></canvas>
                 </div>
@@ -1406,35 +1177,47 @@ function renderQuestionAnalysisCard(q, uniqueIdPrefix, includePacing = false) {
 
 /**
  * Retrieves relevant chapters from the SAT_CHAPTER_SKILL_MAPPING for a given skill and subject.
+ * @param {string} skillName - The skill name.
+ * @param {string} subject - The subject (e.g., 'math', 'reading', 'writing').
+ * @returns {string[]} An array of chapter names.
  */
 function getChaptersForSkill(skillName, subject) {
-    const chapters = new Set();
+    const chapters = new Set(); // Use a Set to avoid duplicate chapter names
     const skillMap = SAT_CHAPTER_SKILL_MAPPING[subject];
 
-    if (skillMap && skillName && !String(skillName).includes('TBD_No_Correlation_Or_CustomQID')) {
+    if (skillMap) {
+        // Iterate through the mapping to find all chapters associated with the skill
         for (const mappedSkill in skillMap) {
+            // Simple check if the skill name is a substring or exact match
             if (skillName.toLowerCase().includes(mappedSkill.toLowerCase()) || mappedSkill.toLowerCase().includes(skillName.toLowerCase())) {
                 skillMap[mappedSkill].forEach(chapter => chapters.add(chapter));
             }
         }
     }
-    return Array.from(chapters).sort();
+    return Array.from(chapters).sort(); // Convert Set to Array and sort for consistent order
 }
+
 
 /**
  * Renders dynamic Chart.js charts for canvases present in the modalBody.
+ * This must be called *after* the HTML content with the canvas elements is in the DOM.
  */
 function renderDynamicCharts() {
-    const canvases = modalBody.querySelectorAll('canvas[id^="chart-"]');
+    const canvases = modalBody.querySelectorAll('canvas[id^="chart-"]'); // Select all question charts
     canvases.forEach(canvas => {
         const chartId = canvas.id;
         const existingChart = Chart.getChart(chartId);
         if (existingChart) {
-            existingChart.destroy();
+            existingChart.destroy(); // Destroy existing chart instance to prevent duplicates
         }
 
-        const qIdMatch = chartId.match(/(Q\d+|-EOC-[RWM]\d+-C\d+-\w+|Khan:.+)/);
-        const qId = qIdMatch ? qIdMatch[0] : null;
+        // Extract original question ID from the chartId (e.g., "chart-skill-0-DT-Q1")
+        // Need to be careful here: the q.id might not always be the last part if uniqueIdPrefix contains hyphens.
+        // A more robust way would be to pass the actual question object to renderQuestionAnalysisCard
+        // and then pass its ID directly here.
+        // For now, let's assume q.id is unique enough and can be extracted.
+        const qIdMatch = chartId.match(/-(Q\d+|-EOC-M\d+)/); // More specific regex for our dummy IDs
+        const qId = qIdMatch ? qId[0].substring(1) : null; // Remove leading hyphen
 
         const qData = ALL_DASHBOARD_QUESTIONS.find(q => q.id === qId);
 
@@ -1449,7 +1232,7 @@ function renderDynamicCharts() {
                     labels: ['Correct', 'Incorrect', 'Unanswered'],
                     datasets: [{
                         data: [correct, incorrect, unanswered],
-                        backgroundColor: ['#28a745', '#dc3545', '#ffc107'],
+                        backgroundColor: ['#28a745', '#dc3545', '#ffc107'], // Green, Red, Yellow
                         borderColor: '#ffffff',
                         borderWidth: 1
                     }]
@@ -1458,10 +1241,32 @@ function renderDynamicCharts() {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } },
-                        tooltip: { callbacks: { label: function(context) { return `${context.label}: ${context.parsed}%`; } } }
+                        legend: {
+                            display: true,
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 12,
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed !== null) {
+                                        label += context.parsed + '%';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
                     },
-                    cutout: '60%',
+                    cutout: '60%', // Makes it a donut
                 }
             });
         }
@@ -1470,6 +1275,8 @@ function renderDynamicCharts() {
 
 /**
  * Renders a bar chart for pacing analysis.
+ * @param {string} canvasId - The ID of the canvas element.
+ * @param {Array} questions - An array of question objects with pacing data.
  */
 function renderPacingBarChart(canvasId, questions) {
     const canvas = document.getElementById(canvasId);
@@ -1485,14 +1292,14 @@ function renderPacingBarChart(canvasId, questions) {
     const classAvgTimes = questions.map(q => q.classAvgTime);
 
     const backgroundColors = questions.map(q => {
-        const diff = (q.yourTime || 0) - (q.classAvgTime || 0);
-        if (diff > 15) return '#dc3545';
-        if (diff < -15) return '#28a745';
-        return '#4b5266'; // Changed to a slightly darker shade to distinguish from 'performance-na'
+        const diff = q.yourTime - q.classAvgTime;
+        if (diff > 15) return '#dc3545'; // Slower (Red)
+        if (diff < -15) return '#28a745'; // Faster (Green)
+        return '#4b5563'; // On Pace (Grey/Blue - similar to theme)
     });
 
     const borderColors = questions.map(q => {
-        const diff = (q.yourTime || 0) - (q.classAvgTime || 0);
+        const diff = q.yourTime - q.classAvgTime;
         if (diff > 15) return '#bb2124';
         if (diff < -15) return '#198754';
         return '#2a5266';
@@ -1503,23 +1310,48 @@ function renderPacingBarChart(canvasId, questions) {
         data: {
             labels: labels,
             datasets: [
-                { label: 'Your Time (s)', data: yourTimes, backgroundColor: backgroundColors, borderColor: borderColors, borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.8 },
-                { label: 'Class Avg Time (s)', data: classAvgTimes, backgroundColor: 'rgba(117, 117, 117, 0.5)', borderColor: 'rgba(117, 117, 117, 0.8)', borderWidth: 1, type: 'line', fill: false, pointRadius: 3, pointBackgroundColor: '#757575', tension: 0.1, hidden: false }
+                {
+                    label: 'Your Time (s)',
+                    data: yourTimes,
+                    backgroundColor: backgroundColors,
+                    borderColor: borderColors,
+                    borderWidth: 1,
+                    barPercentage: 0.8,
+                    categoryPercentage: 0.8
+                },
+                {
+                    label: 'Class Avg Time (s)',
+                    data: classAvgTimes,
+                    backgroundColor: 'rgba(117, 117, 117, 0.5)', // Lighter grey for class average
+                    borderColor: 'rgba(117, 117, 117, 0.8)',
+                    borderWidth: 1,
+                    type: 'line', // Make class avg a line on top of bars
+                    fill: false,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#757575',
+                    tension: 0.1,
+                    hidden: false // Ensure this dataset is visible
+                }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { display: true },
+                legend: {
+                    display: true
+                },
                 tooltip: {
-                    mode: 'index', intersect: false,
+                    mode: 'index',
+                    intersect: false,
                     callbacks: {
-                        title: function(context) { return context[0].label; },
+                        title: function(context) {
+                            return context[0].label; // Q#
+                        },
                         label: function(context) {
                             if (context.dataset.label === 'Your Time (s)') {
                                 const qIndex = context.dataIndex;
-                                const difficulty = (questions[qIndex] && questions[qIndex].difficulty) ? questions[qIndex].difficulty : 'N/A';
+                                const difficulty = questions[qIndex].difficulty;
                                 return `${context.dataset.label}: ${context.parsed.y}s (Difficulty: ${difficulty})`;
                             }
                             return `${context.dataset.label}: ${context.parsed.y}s`;
@@ -1528,15 +1360,31 @@ function renderPacingBarChart(canvasId, questions) {
                 }
             },
             scales: {
-                x: { title: { display: true, text: 'Question Number' }, grid: { display: false } },
-                y: { title: { display: true, text: 'Time (seconds)' }, beginAtZero: true }
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Question Number'
+                    },
+                    grid: {
+                        display: false
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Time (seconds)'
+                    },
+                    beginAtZero: true
+                }
             }
         }
     });
 }
 
+
 /**
  * Adds event listeners to "Show Explanation" buttons to toggle explanation visibility.
+ * This needs to be called every time new content is loaded into the modalBody.
  */
 function addExplanationToggleListeners() {
     modalBody.querySelectorAll('.toggle-explanation-btn').forEach(button => {
